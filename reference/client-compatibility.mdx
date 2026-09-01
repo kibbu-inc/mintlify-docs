@@ -4,7 +4,7 @@ description: "Which clients work against Kibbu unchanged, and the two values you
 icon: "plug"
 ---
 
-Kibbu speaks the OpenAI wire protocol. Point an existing OpenAI client at your control plane and it works — same request shapes, same response objects, same SSE framing including the `data: [DONE]` terminator.
+Kibbu speaks the OpenAI wire protocol. Point an existing OpenAI client at `app.kibbu.io` and it works — same request shapes, same response objects, same SSE framing including the `data: [DONE]` terminator.
 
 <Note>
   **There is no Kibbu SDK to install.** Use the official OpenAI libraries, or any OpenAI-compatible client you already have. Two values change; nothing else does.
@@ -14,7 +14,7 @@ Kibbu speaks the OpenAI wire protocol. Point an existing OpenAI client at your c
 
 |  | Set it to |
 | --- | --- |
-| Base URL | `https://<your-control-plane>/v1` |
+| Base URL | `https://app.kibbu.io/v1` |
 | API key | Your `kibbu_...` key |
 
 <CodeGroup>

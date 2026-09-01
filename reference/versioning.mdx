@@ -56,10 +56,10 @@ That is why every guide here says the same thing: read `GET /v1/models` rather t
 
 ## The machine-readable spec
 
-Your control plane serves its own OpenAPI document, generated from the same source as the routes it actually serves:
+Kibbu serves its own OpenAPI document, generated from the same source as the routes it actually serves:
 
 ```bash
-curl -sS https://<your-control-plane>/v1/openapi.yaml
+curl -sS https://app.kibbu.io/v1/openapi.yaml
 ```
 
 Diffing that between upgrades is the most reliable way to see exactly what changed for you.

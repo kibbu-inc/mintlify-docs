@@ -7,10 +7,10 @@ icon: "sitemap"
 ## Base URL
 
 ```text
-https://<your-control-plane>/v1
+https://app.kibbu.io/v1
 ```
 
-Your admin console shows the exact host. Everything below is relative to it.
+Everything below is relative to that base.
 
 ## Authentication
 
@@ -88,11 +88,11 @@ These are the surfaces the product is built around.
 
 ## The machine-readable spec
 
-The control plane serves its own OpenAPI document. It is generated from the same source as this reference, so it cannot drift from what the fleet actually routes:
+Kibbu serves its own OpenAPI document. It is generated from the same source as this reference, so it cannot drift from what the fleet actually routes:
 
 ```bash
-curl -sS https://<your-control-plane>/v1/openapi.yaml
-curl -sS https://<your-control-plane>/v1/openapi.json
+curl -sS https://app.kibbu.io/v1/openapi.yaml
+curl -sS https://app.kibbu.io/v1/openapi.json
 ```
 
 Point your client generator at that rather than transcribing tables by hand.
