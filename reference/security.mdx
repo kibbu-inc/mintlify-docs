@@ -1,0 +1,59 @@
+---
+title: "Reporting a vulnerability"
+sidebarTitle: "Security reporting"
+description: "How to report a security issue in the Kibbu control plane, agent, or admin console."
+icon: "shield-exclamation"
+---
+
+Good-faith security research is welcome. This is the short version for people who found something. The authoritative document — scope, safe-harbor terms, response targets, and the coordinated-disclosure timeline — is the vulnerability disclosure policy linked from `security.txt`.
+
+## Where to send it
+
+Every Kibbu control plane publishes a machine-readable pointer to its own security contact:
+
+```bash
+curl -sS https://<your-control-plane>/.well-known/security.txt
+```
+
+That file is served unauthenticated, follows [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116), and carries the current `Contact` and `Policy` values for the deployment you are testing.
+
+<Note>
+  Read the contact from `security.txt` rather than from this page. That way you are always reporting to the operator who can act on it — which is not necessarily us.
+</Note>
+
+## What to include
+
+Enough detail to reproduce:
+
+| Include | How to get it |
+| --- | --- |
+| Affected version or commit | `GET /version` returns both. |
+| The component | Control plane, agent, admin console, or the mesh data plane. |
+| A proof-of-concept | Or clear reproduction steps. |
+| The impact you observed | What the issue actually let you do. |
+
+If you believe the issue exposes customer data, or lets one organization read another's, say so up front so it is prioritized.
+
+## What not to do
+
+Do not open a public issue for a suspected vulnerability, and do not disclose it publicly before a fix and a disclosure date have been agreed.
+
+## What happens next
+
+<Steps>
+  <Step title="Acknowledgement">
+    You get a tracking reference.
+  </Step>
+  <Step title="Triage">
+    A triage decision and a severity assessment.
+  </Step>
+  <Step title="Coordinated disclosure">
+    A disclosure date is agreed, and you are credited if you want to be.
+  </Step>
+</Steps>
+
+Response targets, and the safe-harbor terms that cover research conducted in line with them, are stated in the vulnerability disclosure policy.
+
+## Supported versions
+
+Security fixes target the latest released control plane and agent. The supported skew between the two, and how long an older agent keeps working, are described in [Versioning](/reference/versioning).
