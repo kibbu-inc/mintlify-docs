@@ -9,10 +9,10 @@ Good-faith security research is welcome. This is the short version for people wh
 
 ## Where to send it
 
-Every Kibbu control plane publishes a machine-readable pointer to its own security contact:
+Kibbu publishes a machine-readable pointer to its current security contact:
 
 ```bash
-curl -sS https://<your-control-plane>/.well-known/security.txt
+curl -sS https://app.kibbu.io/.well-known/security.txt
 ```
 
 That file is served unauthenticated, follows [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116), and carries the current `Contact` and `Policy` values for the deployment you are testing.
