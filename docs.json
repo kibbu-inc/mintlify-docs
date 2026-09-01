@@ -1,0 +1,90 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Kibbu",
+  "colors": {
+    "primary": "#0A0A0A",
+    "light": "#FDBA74",
+    "dark": "#F97316"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "pages": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "index",
+          "quickstart"
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "group": "Get started",
+        "icon": "rocket",
+        "pages": [
+          "index",
+          "quickstart",
+          "enroll-a-machine",
+          "api-keys"
+        ]
+      },
+      {
+        "group": "Core concepts",
+        "icon": "diagram-project",
+        "pages": [
+          "concepts/how-kibbu-works",
+          "concepts/fleet-and-machines",
+          "concepts/routing-ladder",
+          "concepts/admin-console"
+        ]
+      },
+      {
+        "group": "API reference",
+        "icon": "code",
+        "pages": [
+          "api/surface",
+          "api/chat-completions",
+          "api/models",
+          "api/embeddings",
+          "api/extensions"
+        ]
+      },
+      {
+        "group": "Reference",
+        "icon": "book",
+        "pages": [
+          "reference/errors",
+          "reference/statuses",
+          "reference/client-compatibility",
+          "reference/limits",
+          "reference/data-handling",
+          "reference/versioning",
+          "reference/cli"
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": []
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude"
+    ]
+  },
+  "footer": {
+    "socials": {
+    }
+  },
+  "description": "Run AI inference on the computers your company already owns. Kibbu is an OpenAI-compatible control plane for a fleet of your own machines, with cloud as the overflow.",
+  "appearance": {
+    "default": "light"
+  },
+  "fonts": {
+    "family": "Cabin"
+  }
+}

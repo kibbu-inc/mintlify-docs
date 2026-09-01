@@ -1,0 +1,126 @@
+---
+title: "API surface"
+description: "One base URL, one bearer token, and an honest list of what is served and what is not."
+icon: "sitemap"
+---
+
+## Base URL
+
+```text
+https://<your-control-plane>/v1
+```
+
+Your admin console shows the exact host. Everything below is relative to it.
+
+## Authentication
+
+Every request carries a per-organization API key as a bearer token:
+
+```http
+Authorization: Bearer kibbu_...
+```
+
+A token that does not begin with `kibbu_` — a raw vendor key, for instance — returns `401 invalid_api_key`. See [API keys](/api-keys).
+
+## What is served
+
+Kibbu implements a subset of the OpenAI API surface. Which surfaces are enabled is a **per-deployment decision** — your operator can turn optional ones off, and a disabled surface answers `404` with `code: unsupported_endpoint`, exactly like one that was never built.
+
+**Feature-detect rather than assume.** Catching a 404 with that code is the supported way to ask "does this fleet do audio?".
+
+### Core
+
+These are the surfaces the product is built around.
+
+| Endpoint | Notes |
+| --- | --- |
+| `POST /v1/chat/completions` | Streaming and non-streaming. Terminator `data: [DONE]`. |
+| `POST /v1/completions` | Legacy text completion. |
+| `GET /v1/models` | The models enabled for your organization. |
+| `GET /v1/models/{model_id}` | One model. |
+| `GET /v1/status` | Fleet capacity summary. |
+
+### Commonly enabled
+
+| Endpoint | Notes |
+| --- | --- |
+| `POST /v1/embeddings` | Vector embeddings. |
+| `POST /v1/rerank` | Cross-encoder reranking. A Kibbu extension — no OpenAI equivalent. |
+| `/v1/files/*` | Upload, list, fetch, download, delete. |
+| `/v1/batches/*` | Asynchronous work in a completion window. |
+| `/v1/fine_tuning/jobs/*` | Adapter fine-tuning. |
+| `POST /v1/responses` | Stateful responses. Send `store: false` to opt out of persistence. |
+| `/v1/prompts/*` | Server-side versioned prompt templates. |
+| `/v1/webhooks/*` | Event subscriptions and delivery history. |
+| `/v1/receipts/*` | Per-response signatures and the trust roots to verify them. |
+| `/v1/vector_stores/*` | Searchable document stores. |
+
+### Optional
+
+**Off by default.** Each is mounted only when your operator turns on the matching feature flag; until then it answers `404 unsupported_endpoint`. Assume they are unavailable and feature-detect.
+
+| Endpoint | Notes |
+| --- | --- |
+| `POST /v1/moderations` | Content classification. |
+| `/v1/audio/*` | Transcription and speech. |
+| `/v1/images/*` | Generation, edits, variations, control. |
+| `POST /v1/videos/generations` | Video generation. |
+| `GET /v1/realtime` | Realtime WebSocket session. |
+| `/v1/code_interpreter/*` | Sandboxed code execution. |
+
+<Warning>
+  Image and video generation need more than the feature flag: no serving runtime for them ships on fleet machines today, so enabling the flag alone will not make them work. Treat them as unavailable unless your operator tells you otherwise.
+</Warning>
+
+### Data rights
+
+`POST /v1/privacy/export` and `POST /v1/privacy/delete` let you export or erase everything held about one end user. They are also off by default and return `403 data_rights_disabled` until enabled. See [Data handling](/reference/data-handling).
+
+### Never served
+
+| Endpoint |  |
+| --- | --- |
+| `/v1/assistants/*`, `/v1/threads/*`, `/v1/runs/*` | Deliberately absent. `404`, `code: unsupported_endpoint`. |
+
+<Note>
+  Kibbu returns `404` rather than `501` for an endpoint it does not serve, on purpose: the official OpenAI clients retry `5xx` responses, so a `501` would burn a client's whole retry budget and then surface as a server fault. A `404` raises `NotFoundError` immediately — which is what feature-detection code in the wild already handles.
+</Note>
+
+## The machine-readable spec
+
+The control plane serves its own OpenAPI document. It is generated from the same source as this reference, so it cannot drift from what the fleet actually routes:
+
+```bash
+curl -sS https://<your-control-plane>/v1/openapi.yaml
+curl -sS https://<your-control-plane>/v1/openapi.json
+```
+
+Point your client generator at that rather than transcribing tables by hand.
+
+## Errors
+
+Every error uses the OpenAI envelope. Branch on `code`, never on `message`:
+
+```json
+{
+  "error": {
+    "message": "human-readable, may change",
+    "type": "invalid_request_error",
+    "code": "model_warming_up"
+  }
+}
+```
+
+The full vocabulary is in [Error codes](/reference/errors).
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Chat completions" icon="comments" href="/api/chat-completions">
+    The endpoint most traffic uses.
+  </Card>
+
+  <Card title="Kibbu extensions" icon="sliders" href="/api/extensions">
+    Optional fields Kibbu adds to the OpenAI request shapes.
+  </Card>
+</CardGroup>

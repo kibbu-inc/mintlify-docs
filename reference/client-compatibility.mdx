@@ -1,0 +1,132 @@
+---
+title: "Client compatibility"
+description: "Which clients work against Kibbu unchanged, and the two values you change."
+icon: "plug"
+---
+
+Kibbu speaks the OpenAI wire protocol. Point an existing OpenAI client at your control plane and it works — same request shapes, same response objects, same SSE framing including the `data: [DONE]` terminator.
+
+<Note>
+  **There is no Kibbu SDK to install.** Use the official OpenAI libraries, or any OpenAI-compatible client you already have. Two values change; nothing else does.
+</Note>
+
+## The two values
+
+|  | Set it to |
+| --- | --- |
+| Base URL | `https://<your-control-plane>/v1` |
+| API key | Your `kibbu_...` key |
+
+<CodeGroup>
+
+```python Python
+# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=os.environ["KIBBU_BASE_URL"],
+    api_key=os.environ["KIBBU_API_KEY"],
+)
+```
+
+```javascript JavaScript
+// npm i openai
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: process.env.KIBBU_BASE_URL,
+  apiKey: process.env.KIBBU_API_KEY,
+});
+```
+
+```go Go
+// go get github.com/openai/openai-go
+client := openai.NewClient(
+    option.WithBaseURL(os.Getenv("KIBBU_BASE_URL")),
+    option.WithAPIKey(os.Getenv("KIBBU_API_KEY")),
+)
+```
+
+```bash curl
+curl -sS "$KIBBU_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"'"$KIBBU_MODEL"'","messages":[{"role":"user","content":"hi"}]}'
+```
+
+</CodeGroup>
+
+Anything built on those libraries — LangChain, LlamaIndex, the Vercel AI SDK, an internal wrapper — inherits the same compatibility. If it takes a base URL, it works.
+
+## What to expect from a stock client
+
+<AccordionGroup>
+  <Accordion title="Streaming works unchanged" icon="wave-square">
+    The SSE format is byte-compatible, terminator included. Streaming helpers in the OpenAI clients need no modification.
+  </Accordion>
+
+  <Accordion title="Retries mostly do the right thing" icon="arrows-rotate">
+    The OpenAI clients retry `408`, `409`, `429` and `5xx` by default. That matches Kibbu's retryable set closely — but they will also retry the handful of `503`s that a retry cannot fix, such as `model_too_large_for_fleet`. If that matters, branch on `code` yourself; see [Error codes](/reference/errors).
+  </Accordion>
+
+  <Accordion title="Absent endpoints raise NotFoundError" icon="circle-question">
+    An endpoint Kibbu does not serve returns `404` with `code: unsupported_endpoint`, so clients raise `NotFoundError` immediately rather than burning their retry budget. That makes feature detection cheap.
+  </Accordion>
+
+  <Accordion title="Unknown fields must be ignored" icon="shield-check">
+    `/v1` is additive-only, so responses can gain fields. The official clients tolerate this. If you hand-rolled a strict parser, loosen it.
+  </Accordion>
+</AccordionGroup>
+
+## Using Kibbu extensions from a stock client
+
+The optional Kibbu fields go in the request body. No special client support is needed:
+
+<CodeGroup>
+
+```python Python
+res = client.chat.completions.create(
+    model=MODEL,
+    messages=[{"role": "user", "content": "..."}],
+    extra_body={"tier": "batch"},
+)
+```
+
+```javascript JavaScript
+const res = await client.chat.completions.create({
+  model: MODEL,
+  messages: [{ role: "user", content: "..." }],
+  tier: "batch",
+});
+```
+
+</CodeGroup>
+
+The one exception is `POST /v1/rerank`, which has no OpenAI equivalent and therefore no client method — call it over plain HTTP. See [Kibbu extensions](/api/extensions).
+
+## Migrating an existing application
+
+<Steps>
+  <Step title="Change the base URL and key">
+    Ideally by configuration, so you can move traffic back without a deploy.
+  </Step>
+  <Step title="Replace hardcoded model ids">
+    Vendor model names are not Kibbu model ids. Read `GET /v1/models` and pick from what your organization has enabled.
+  </Step>
+  <Step title="Send a fraction of traffic first">
+    Watch the **Usage** view for the local-versus-cloud split and the error rate before moving the rest.
+  </Step>
+  <Step title="Tag your bulk work">
+    Set `tier: "batch"` on anything that is not user-facing. It is the single highest-leverage change you can make on a shared fleet.
+  </Step>
+</Steps>
+
+## Known differences from OpenAI
+
+These are behavioural, not protocol, differences — worth knowing before you migrate.
+
+- **Cold starts are real.** The first request for a model your fleet has not cached returns `503 model_warming_up`. Retry after `Retry-After`.
+- **Capacity is finite and yours.** Your own machines serve you, so capacity errors reflect your fleet's size and how busy the owners are — not a global service.
+- **`n > 1` is usually unavailable.** Most models serve one completion per call and return `400 n_not_supported` otherwise.
+- **Assistants, Threads and Runs are not served.** They return `404 unsupported_endpoint`.

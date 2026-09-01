@@ -1,0 +1,88 @@
+---
+title: "Chat completions"
+description: "POST /v1/chat/completions — the endpoint most traffic uses."
+icon: "comments"
+---
+
+`POST /v1/chat/completions` accepts the standard OpenAI request body and returns the standard `chat.completion` object. Any OpenAI client works against it unchanged.
+
+```bash
+curl -sS "$KIBBU_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "'"$KIBBU_MODEL"'",
+    "messages": [{ "role": "user", "content": "Say hello." }]
+  }'
+```
+
+## Request
+
+<ParamField body="model" type="string" required>
+  A model id from `GET /v1/models`. May carry a `:adapter` suffix to select a LoRA adapter — see [Kibbu extensions](/api/extensions).
+</ParamField>
+
+<ParamField body="messages" type="array" required>
+  The conversation, in OpenAI's `{ role, content }` shape.
+</ParamField>
+
+<ParamField body="stream" default="false" type="boolean">
+  Stream `chat.completion.chunk` objects over Server-Sent Events, terminated by `data: [DONE]`.
+</ParamField>
+
+<ParamField body="tools" type="array">
+  Tool definitions in OpenAI's shape. A model without a local tool template returns `400 model_does_not_support_tools` rather than ignoring the tools.
+</ParamField>
+
+<ParamField body="response_format" type="object">
+  Structured output. Malformed or unsupported shapes return `400 response_format_invalid`.
+</ParamField>
+
+<ParamField body="max_completion_tokens" type="integer">
+  Must be a positive integer. `0` or a negative value returns `400 invalid_max_completion_tokens`.
+</ParamField>
+
+<ParamField body="n" default="1" type="integer">
+  Most models serve a single completion per call and return `400 n_not_supported` for `n > 1`.
+</ParamField>
+
+Kibbu also accepts several optional additive fields — `tier`, `lora_id`, `reasoning_effort` and others. A client that never sets them sees byte-identical behaviour. They are documented in [Kibbu extensions](/api/extensions).
+
+## Streaming
+
+```bash
+curl -sS -N "$KIBBU_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"'"$KIBBU_MODEL"'","stream":true,"messages":[{"role":"user","content":"Count to five."}]}'
+```
+
+The wire format is the OpenAI SSE format, including the `data: [DONE]` terminator, so streaming clients need no changes.
+
+<Note>
+  A machine can be reclaimed by its owner mid-stream. Kibbu re-routes and completes the answer where it can. Where it genuinely cannot, the stream ends with an error frame rather than truncating silently — so treat a stream that ends without `[DONE]` as a failure, not a short answer.
+</Note>
+
+## Response headers worth reading
+
+| Header | Meaning |
+| --- | --- |
+| `X-Kibbu-Slow-Serve` | The request was served on hardware below the interactive speed floor, because that was better than refusing. Expect a slow answer. |
+| `X-Kibbu-Budget-Warning` | Your organization has passed a percentage of its spend budget. The request was still served. |
+| `Retry-After` | On `429` and most `503`s, how long to wait. |
+| `x-ratelimit-*` | Remaining requests and tokens under the current caps. |
+
+## Errors specific to this endpoint
+
+| HTTP | `code` | Meaning |
+| --- | --- | --- |
+| `400` | `context_length_exceeded` | Prompt plus completion exceed the model's context window. |
+| `400` | `model_kind_mismatch` | An embedding model was addressed at a chat endpoint. |
+| `400` | `model_does_not_support_tools` | The model has no tool template. |
+| `400` | `invalid_tier` | Unknown `tier`. Use `reserved`, `interactive`, `batch` or `idle`. |
+| `404` | `model_not_found` | The id is not enabled for your organization. |
+| `413` | `request_too_large` | The body exceeds the inference body cap (10 MiB by default). |
+| `503` | `model_warming_up` | The machine is still loading the model. Retry after 30s. |
+| `503` | `fleet_busy` | Every rung was tried and none could serve. Retry shortly. |
+
+The full list is in [Error codes](/reference/errors).

@@ -1,0 +1,95 @@
+---
+title: "What happens to your prompts"
+sidebarTitle: "Data handling"
+description: "Whether your prompts are logged, stored, or trained on — and how to opt out."
+icon: "shield-halved"
+---
+
+The short version, for developers deciding whether to send real traffic.
+
+## The four questions
+
+<AccordionGroup>
+  <Accordion title="Are my prompts logged?" icon="file-lines">
+    **No.** Nothing the control plane logs contains your request or response text — on any path, including errors and crashes. Logs carry identifiers, token counts, durations and outcome classes.
+  </Accordion>
+
+  <Accordion title="Are my prompts stored?" icon="database">
+    **Not for an ordinary request.** A normal `/v1/chat/completions` call leaves behind metadata and one-way fingerprints, not your text. Content is stored only where you or your operator asked for it, and the list is short — it is below.
+  </Accordion>
+
+  <Accordion title="Are my prompts used for training?" icon="graduation-cap">
+    **No.** Your traffic never trains a Kibbu model, a shared model, or anyone else's model.
+
+    There is one feature that can build a **private, per-user** adapter from your own interactions, and it never leaves your organization. What keeps it inert is a single operator setting — request capture, which is **off by default**. The nightly job that would use captured data is itself enabled by default; it is harmless only because there is nothing captured for it to read. We would rather say that plainly than imply several independent switches protect you.
+  </Accordion>
+
+  <Accordion title="What do you keep?" icon="fingerprint">
+    Request and organization ids, model id, token counts, timings, status and error class, and SHA-256 fingerprints of the prompt and response on verification receipts. A fingerprint proves a response came from a given machine **without containing the response**.
+  </Accordion>
+</AccordionGroup>
+
+## Where content _is_ stored
+
+| What | When it happens | Kept for |
+| --- | --- | --- |
+| Stateful `/v1/responses` | You use that endpoint. Send `store: false` to opt out. | 30 days |
+| Files you upload | You upload training or batch data. You can delete them. | Until you delete |
+| Knowledge bases | You attach a file to a vector store; its text is chunked and stored so it can be searched. | Until you delete the file or store |
+| Saved prompts | You save a prompt template; each version is kept so you can roll back. | Until you delete the prompt |
+| Feedback you submit | You post feedback on a response. | 180 days |
+| Idempotent replay | You send an `Idempotency-Key` header. Streaming and `store: false` are never cached. | 24 hours |
+| Request capture | **Your operator** turns it on. Off by default. | 14 days |
+| Saved console sessions | An admin explicitly saves one. | 365 days |
+
+Knowledge bases and saved prompts are kept for as long as the thing you created exists, rather than on a timer — expiring a live knowledge base or your prompt history would break the feature. Deleting the object deletes the text.
+
+## Idempotent replay
+
+If you send an `Idempotency-Key` header, a **successful, non-streaming** response body is stored for 24 hours so a retry with the same key and body returns the same answer instead of re-running the model.
+
+Stock OpenAI clients do not send that header, so by default nothing here applies to you. If you add it deliberately:
+
+- **Streaming responses are never cached.** A `stream: true` call creates the bookkeeping record but stores no response body.
+- **`store: false` bodies are never cached**, key or no key. The bookkeeping record still exists for 24 hours — organization id, the key, a hash of the request body and a timestamp, never the content.
+
+## Opting out on `/v1/responses`
+
+```bash
+curl -sS "$KIBBU_BASE_URL/responses" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"'"$KIBBU_MODEL"'","input":"...","store":false}'
+```
+
+The response is **not** persisted and **not** retrievable afterwards — that is the point. The opt-out covers the whole request path, not just the response record:
+
+- it is **not** cached for idempotent replay, even with an `Idempotency-Key` present;
+- it is **not** captured for replay or the personal-adapter feature, even on a fleet where your operator turned request capture on.
+
+`background: true` needs a stored record to poll, so it cannot be combined with `store: false` — you get an explicit error rather than a silently stored response.
+
+## One thing to know about routing
+
+If a request is served by an **external provider** instead of your own fleet, that provider's terms govern their handling of it. Kibbu cannot promise otherwise for infrastructure it does not run, so it does not.
+
+Whether that can happen at all is your operator's decision: on a fleet with no cloud provider configured, requests the local rungs cannot serve return `cloud_not_configured` rather than going anywhere. See [The routing ladder](/concepts/routing-ladder).
+
+## Getting your data out, or deleted
+
+Export everything Kibbu holds about one end user — identified by the same opaque `user` value you send on requests:
+
+```bash
+curl -sS -X POST "$KIBBU_BASE_URL/privacy/export" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"user":"<the-user-value-you-send-on-requests>"}'
+```
+
+`POST /v1/privacy/delete` is the erasure counterpart, and is deliberately **two-step**: the first call returns `confirmation_required: true`, a `confirmation_token` and a preview of what would be removed. Only a second call echoing that token performs the deletion.
+
+Both endpoints are gated by an operator setting. If self-service data rights are off on your fleet they return `403 data_rights_disabled` — an explicit refusal, not a silent no-op.
+
+## Found a discrepancy?
+
+That is a bug, and we want to hear about it. A commitment you cannot check is not worth much — report it to your Kibbu operator.

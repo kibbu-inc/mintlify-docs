@@ -1,0 +1,145 @@
+---
+title: "Error codes"
+description: "Every machine-readable error code the API can return, and whether a retry helps."
+icon: "triangle-exclamation"
+---
+
+Every error uses the OpenAI envelope:
+
+```json
+{
+  "error": {
+    "message": "human-readable, may change",
+    "type": "invalid_request_error",
+    "code": "model_warming_up"
+  }
+}
+```
+
+**Branch on `code`, never on `message`.** Codes are frozen: they are added forward-only and never reused for a different meaning. Message text is free to change.
+
+Retryable codes carry `Retry-After` wherever a specific wait is known.
+
+<Note>
+  This page covers the codes a normal integration meets. The complete catalogue, including surfaces your deployment may not have enabled, is served by your control plane at `/v1/openapi.yaml`.
+</Note>
+
+## Authentication and request shape
+
+Fix the request. A retry changes nothing.
+
+| `code` | HTTP | Meaning |
+| --- | --- | --- |
+| `invalid_api_key` | 401 | Missing, malformed or revoked bearer. Keys start with `kibbu_`. |
+| `insufficient_scope` | 403 | The key is valid but not scoped to this endpoint. |
+| `missing_org` | 403 | The credential resolved but carries no organization. |
+| `org_suspended` | 403 | An operator has disabled the organization. All data is retained. |
+| `org_deleted` | 503 | The organization has been deleted. Every route refuses until it is restored or purged. |
+| `invalid_request_error` | 400 / 405 / 415 | Bad JSON, a missing field, the wrong method or the wrong content type. |
+| `request_too_large` | 413 | The body exceeds the inference body cap (10 MiB by default). Split or shorten it. |
+| `unsupported_endpoint` | 404 | Kibbu does not serve this endpoint, or your deployment has it disabled. |
+
+## Model and capability
+
+The model or the feature is the problem — change one of them.
+
+| `code` | HTTP | Meaning |
+| --- | --- | --- |
+| `model_not_found` | 404 | Not in your organization's catalog. Re-read `GET /v1/models`. |
+| `model_kind_mismatch` | 400 | An embedding model at a chat endpoint, or the reverse. |
+| `model_does_not_support_tools` | 400 | The request carries `tools` but the model has no tool template. |
+| `response_format_invalid` | 400 | `response_format` is malformed or unsupported. |
+| `tool_grammar_synthesis_failed` | 400 | The tool or structured-output grammar could not be built for this model. |
+| `context_length_exceeded` | 400 | Prompt plus completion exceed the context window. |
+| `invalid_tier` | 400 | Unknown `tier`. Use `reserved`, `interactive`, `batch` or `idle`. |
+| `invalid_max_completion_tokens` | 400 | `max_completion_tokens` is not a positive integer. |
+| `n_not_supported` | 400 | `n > 1` is not supported on this model. Request one completion per call. |
+| `invalid_reasoning_effort` | 400 | `reasoning_effort` is outside the allowed values. |
+| `invalid_thinking_budget` | 400 | `thinking.budget_tokens` is negative or malformed. |
+| `invalid_cache_control` | 400 | Malformed `cache_control` block. |
+| `lora_malformed` | 400 | `lora_id` / `personal_lora_id` fails the id format. |
+| `lora_not_enabled` | 404 | The adapter is missing, not selected for you, or belongs to another user. |
+| `lora_base_incompatible` | 400 | The adapter's base model does not match the requested model. |
+| `personal_lora_requires_user` | 400 | `personal_lora_id` set without the `user` field. |
+| `prompt_not_found` | 404 | The referenced saved prompt does not exist. |
+| `prompt_variable_missing` | 400 | A template variable has no value in `prompt_variables`. |
+
+## Quotas, budgets and rate limits
+
+Back off where a `Retry-After` is given. Otherwise, wait for the window or raise the cap.
+
+| `code` | HTTP | Retry | Meaning |
+| --- | --- | --- | --- |
+| `tier_concurrency_cap` | 429 | Backoff | The tier is saturated. `Retry-After` is dynamic. |
+| `tier_quota_exceeded` | 429 | No | The tier's monthly token quota is spent for this period. |
+| `org_quota_exceeded` | 429 | Backoff | A per-organization cap was breached — requests/min, concurrent streams or tokens/day. |
+| `too_many_streams` | 429 | Backoff | The control plane is at its concurrent-stream admission cap. Retry after 5s. |
+| `budget_exceeded` | 402 | No | The monthly spend budget is exhausted. |
+| `cloud_spend_cap_exceeded` | 503 | No | Cloud fallback is off until the cap resets or is raised. |
+
+## Capacity and routing
+
+The fleet, not the request. Some clear on their own; some need an operator.
+
+| `code` | HTTP | Retry | Meaning |
+| --- | --- | --- | --- |
+| `model_warming_up` | 503 | Backoff | A machine is still loading the model. `Retry-After: 30`. |
+| `no_eligible_node` | 503 | Backoff | No machine is currently eligible to serve. |
+| `fleet_busy` | 503 | Backoff | Every rung was walked and none could serve. `Retry-After: 5`. |
+| `model_too_large_for_fleet` | 503 | No | No machine has enough free memory, even split across several. Operator action needed. |
+| `model_too_heavy_for_interactive` | 503 | No | It fits in memory, but the fleet is too slow to serve it at interactive speed. |
+| `model_unsupported_by_engine` | 503 | No | The model's architecture needs a newer runtime than the fleet is running. |
+| `model_unavailable` | 503 | No | Permanently unservable for another reason. Pick another model or contact support. |
+| `model_preparing_across_machines` | 503 | Backoff | A multi-machine plan is still being set up. First-run condition. |
+| `node_unavailable` | 503 | Backoff | The machine pinned to your conversation was lost. |
+| `cloud_not_configured` | 503 | No | Cloud fallback was needed but no provider is configured. |
+| `cloud_circuit_open` | 503 | Backoff | The upstream provider is unhealthy; its breaker is open for a cooldown. |
+| `feature_disabled` | 503 | No | The required feature is disabled on this control plane. |
+
+<Tip>
+  `model_too_large_for_fleet` and `model_too_heavy_for_interactive` look similar and are not. The first is a memory problem — add a bigger machine or pick a smaller model. The second is a speed problem — the model loads fine but the hardware cannot answer fast enough.
+</Tip>
+
+## Timeouts and upstream failures
+
+| `code` | HTTP | Retry | Meaning |
+| --- | --- | --- | --- |
+| `ttft_timeout` | 504 | Backoff | Timed out before the first token. |
+| `request_timeout` | 504 | Backoff | The deadline was exceeded mid-request. |
+| `fallback_budget_exhausted` | 504 | No | The ladder ran out of the request's shared deadline. A retry hits the same budget. |
+| `upstream_error` | 502 / 504 | Backoff | An engine or cloud provider failed, or returned a malformed response. |
+| `internal_error` | 500 | Yes | Unexpected internal failure. Safe to retry. |
+| `client_closed` | 499 | n/a | Your client closed the connection mid-stream. |
+
+## Content safety
+
+Returned when your operator has enabled moderation in blocking mode.
+
+| `code` | HTTP | Meaning |
+| --- | --- | --- |
+| `moderations_blocked` | 400 | Input blocked by the organization's moderation policy. |
+| `prompt_injection_blocked` | 400 | Blocked by the prompt-injection gate. |
+| `model_acceptable_use_violation` | 403 | This model's acceptable-use policy prohibits this class of request. It may be permitted on a **different** model — change model, not prompt. |
+| `csam_blocked` | 403 | Blocked by the fail-closed child-safety gate. |
+| `moderations_not_available` | 503 | No moderation-capable machine is available. |
+
+## A retry policy that works
+
+```python
+RETRYABLE = {
+    "model_warming_up",
+    "no_eligible_node",
+    "fleet_busy",
+    "node_unavailable",
+    "cloud_circuit_open",
+    "tier_concurrency_cap",
+    "org_quota_exceeded",
+    "too_many_streams",
+    "ttft_timeout",
+    "request_timeout",
+    "upstream_error",
+    "internal_error",
+}
+```
+
+Honour `Retry-After` when present; use exponential backoff otherwise. Everything outside that set needs a change to the request, the model, or the fleet — retrying it just burns quota.

@@ -1,0 +1,74 @@
+---
+title: "The admin console"
+description: "Where to find machines, models, usage, keys and the audit log."
+icon: "gauge-high"
+---
+
+The console is where machines are enrolled, models are enabled, and spend is attributed. You sign in with your company's identity provider — there is no separate console password.
+
+## Workspace
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="gauge-high">
+    The current state of the fleet, and a setup checklist on a new organization: connect a machine, enable a model, make your first request.
+  </Card>
+
+  <Card title="Fleet" icon="server">
+    Every enrolled machine, its state, and what it is serving. **Add machine** issues an enrollment token and renders the install command. Selecting a machine opens a detail pane with its telemetry and network path.
+  </Card>
+
+  <Card title="Requests" icon="list-check">
+    Individual inference calls: model, outcome, latency, tokens, and which machine served each one. The first place to look when something is slow or failing.
+  </Card>
+
+  <Card title="Models" icon="box">
+    The catalog. Enable or disable a model for your organization, see whether your fleet can actually run it, and watch weights download after you enable one.
+  </Card>
+
+  <Card title="Usage" icon="chart-column">
+    Tokens and cost over time, split between your own hardware and cloud. This is where the value of the fleet shows up as a number.
+  </Card>
+</CardGroup>
+
+## Account
+
+<CardGroup cols={2}>
+  <Card title="API keys" icon="key">
+    Create, rotate and revoke the keys your applications use. See [API keys](/api-keys).
+  </Card>
+
+  <Card title="Settings" icon="gear">
+    Plan and devices, administrators, enrollment tokens, content safety, cloud fallback and data retention. Advanced fleet tuning is behind a `?show=advanced` view.
+  </Card>
+
+  <Card title="Audit" icon="shield-check">
+    Who did what: sign-ins, key issuance and revocation, model enablement, machine approval and decommissioning.
+  </Card>
+</CardGroup>
+
+## The four things worth doing on day one
+
+<Steps>
+  <Step title="Enroll two machines, not one">
+    One machine is a demo. Two is a fleet — you find out immediately whether placement, failover and the mesh work in your network. See [Enroll a machine](/enroll-a-machine).
+  </Step>
+  <Step title="Enable one model and wait for it to download">
+    The first request after enabling returns `model_warming_up` while machines fetch the weights. Doing this before you point an application at Kibbu means your first real request is a fast one.
+  </Step>
+  <Step title="Decide about cloud fallback">
+    Under **Settings**, either configure a provider — so requests your fleet cannot serve still succeed — or deliberately leave it off, so they fail loudly instead of costing money. Both are valid; drifting into one by accident is not.
+  </Step>
+  <Step title="Set a budget">
+    A spend budget turns a runaway job into a `402` instead of an invoice. Responses carry `X-Kibbu-Budget-Warning` before the cap is reached.
+  </Step>
+</Steps>
+
+## Reading the Usage view
+
+The split between local and cloud is the number that matters. Cloud usage is not failure — it is the ladder working — but a **rising** share means the local rung is failing to serve more often than it used to. The usual causes, in order of likelihood:
+
+1. A newly enabled model is too large for the machines you have.
+2. Machines that used to be idle are now in use, or on battery.
+3. Traffic grew and the fleet did not.
+
+**Requests** narrows it down: filter to cloud-served calls and look at what they have in common.

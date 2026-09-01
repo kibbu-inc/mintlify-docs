@@ -1,0 +1,82 @@
+---
+title: "How Kibbu works"
+description: "The mechanics of splitting a model across several machines, in plain English."
+icon: "layer-group"
+---
+
+No computer-science background needed. If you only want to make requests, [Quickstart](/quickstart) is enough — this page is for when you want to know what is actually happening.
+
+## What a model actually is
+
+A model is a giant stack of **layers**. A question goes in at the top, passes down through every layer one by one, and an answer comes out the bottom. Each layer does a little of the thinking and hands its result to the next.
+
+The catch: the best models have so many layers that the whole stack is too big to fit in a single computer's memory.
+
+## The core trick: split the stack
+
+Kibbu cuts the stack of layers into sections and puts each section on a different computer. A question enters the first machine, goes through its layers, and the half-finished result is passed along the chain. The last machine runs the final layers and produces the answer.
+
+<CardGroup cols={3}>
+  <Card title="Machine A">
+    Layers 1–14
+  </Card>
+
+  <Card title="Machine B">
+    Layers 15–21
+  </Card>
+
+  <Card title="Machine C">
+    Layers 22–28
+  </Card>
+</CardGroup>
+
+It is an assembly line: the thinking moves down the line, each station adds its part and slides it to the next.
+
+## What travels between the computers
+
+- **The model itself never moves.** Each computer loads its own layers once and keeps them. Big files, but they stay put.
+- **What moves is a small work-in-progress note** — a compact summary of the thinking so far. Kilobytes, against tens of gigabytes of model. That is what makes this practical over an ordinary network.
+
+## One word at a time
+
+A model produces its answer one word at a time, and each new word depends on all the words before it. So for every single word the note travels down the line, the last machine picks the next word, and that word goes back to the front so the line can run again.
+
+The loop repeats until the answer is complete — which is why you see the answer typing itself.
+
+## Details that make it work
+
+<AccordionGroup>
+  <Accordion title="Memory of the conversation" icon="brain">
+    Each machine remembers its own section's context, so work is not redone for every word. No single machine ever holds the whole picture.
+  </Accordion>
+
+  <Accordion title="A private connection" icon="lock">
+    Machines talk to each other over an encrypted mesh, not the open internet. Traffic between them is not readable in transit.
+  </Accordion>
+
+  <Accordion title="Self-healing" icon="arrows-rotate">
+    If a machine gets busy, is reclaimed by its owner, or drops off the network, Kibbu notices, reroutes the work, and continues.
+  </Accordion>
+
+  <Accordion title="Deciding the split" icon="scale-balanced">
+    Before any of this runs, Kibbu works out which machine holds which layers, giving bigger sections to more capable machines so no station becomes the bottleneck.
+  </Accordion>
+</AccordionGroup>
+
+## Most requests never need any of this
+
+Splitting only happens when a model is too big for one machine. If a single machine in your fleet can hold the whole model, it serves the request by itself — which is faster, because nothing has to travel between machines at all.
+
+Kibbu prefers that. Splitting is what it does when it must, not what it does by default.
+
+## Where the request actually goes
+
+<CardGroup cols={2}>
+  <Card title="The routing ladder" icon="stairs" href="/concepts/routing-ladder">
+    One machine, then several, then cloud — in that order, and why.
+  </Card>
+
+  <Card title="Fleet and machines" icon="server" href="/concepts/fleet-and-machines">
+    When a machine is eligible to serve, and when it stays out of the way.
+  </Card>
+</CardGroup>

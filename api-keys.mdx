@@ -1,0 +1,79 @@
+---
+title: "API keys"
+description: "The per-organization credential your requests carry, and how to rotate it."
+icon: "key"
+---
+
+Every request to `/v1` authenticates with a **per-organization API key**.
+
+```http
+Authorization: Bearer kibbu_...
+```
+
+## Create a key
+
+1. Open the admin console and go to **API keys**.
+2. Select **Create key** and give it a name that says where it will be used — `checkout-service`, `nightly-evals`. You will thank yourself at rotation time.
+3. The plaintext key is shown **once**. Copy it now; it is stored only as a hash and cannot be shown again.
+
+```bash
+export KIBBU_API_KEY="kibbu_..."
+```
+
+<Warning>
+  Keys are bearer credentials. Anyone holding one can spend your organization's budget. Keep them in a secret store or an environment variable — never in source control, a client-side bundle, or a mobile app.
+</Warning>
+
+## What a key is scoped to
+
+A key is scoped to **one organization**. That single fact decides four things:
+
+- Which models it can see. `GET /v1/models` returns only what your organization has enabled.
+- Which fleet serves it. Requests are placed on your organization's machines.
+- Where usage and spend are attributed.
+- Which rate limits and budgets apply.
+
+Keys created in the console can call every inference endpoint by default. Narrower scopes — chat only, embeddings only — are available under the console's advanced view if you want a key that can do exactly one thing. A key restricted to a surface it was not granted returns `403` with `code: insufficient_scope`.
+
+## Rotate a key
+
+Kibbu does not force a rotation window on you, so rotate by overlapping:
+
+<Steps>
+  <Step title="Create the replacement">
+    Create a second key. Both are now live.
+  </Step>
+  <Step title="Roll it out">
+    Deploy the new value everywhere the old one was used.
+  </Step>
+  <Step title="Confirm the old key is idle">
+    Check **Usage** and the **Audit** log until the old key stops appearing.
+  </Step>
+  <Step title="Revoke the old key">
+    Delete it in the console. Requests carrying it immediately return `401 invalid_api_key`.
+  </Step>
+</Steps>
+
+If a key has leaked, skip the overlap and revoke it first. A short outage is cheaper than an open key.
+
+## An enrollment token is not an API key
+
+The two are easy to confuse and do entirely different jobs.
+
+|  | Enrollment token | API key |
+| --- | --- | --- |
+| Used by | The installer, once, on one machine | Your application, on every request |
+| Presented as | `X-Kibbu-Enroll-Token` header | `Authorization: Bearer` |
+| Lifetime | Short-lived, often single-use | Until you revoke it |
+| Belongs in | An MDM deployment script | A secret store |
+
+An enrollment token cannot make an inference request, and an API key cannot enrol a machine.
+
+## Errors you will see
+
+| HTTP | `code` | Cause |
+| --- | --- | --- |
+| `401` | `invalid_api_key` | Missing, malformed, or revoked bearer. Keys start with `kibbu_`. |
+| `403` | `insufficient_scope` | The key is real but not scoped to this endpoint. |
+| `403` | `missing_org` | The credential resolved but carries no organization. Contact your administrator. |
+| `403` | `org_suspended` | An operator has disabled the organization. A retry never helps; all data is retained. |

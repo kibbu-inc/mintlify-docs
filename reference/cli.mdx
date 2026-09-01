@@ -1,0 +1,82 @@
+---
+title: "Machine CLI"
+description: "The kibbu command installed on every enrolled machine."
+icon: "terminal"
+---
+
+Enrolling a machine installs a `kibbu` command on it. It manages that one machine — it is not an API client, and it cannot make inference requests.
+
+```bash
+kibbu help
+kibbu status
+```
+
+<Note>
+  Run it on the machine itself. Most verbs that change the service need administrator rights (`sudo`, or an elevated PowerShell session).
+</Note>
+
+## Verbs
+
+| Verb | Does |
+| --- | --- |
+| `status` | Local self-diagnosis. The first command to run when a machine is not behaving. |
+| `install` | Install and enrol this machine, and register the service. |
+| `enroll` | Enrol (or re-enrol) an already-installed agent with the control plane. |
+| `start` | Start the agent service. |
+| `stop` | Stop the agent service. |
+| `restart` | Restart the agent service. |
+| `pause` | Pause this machine's inference participation. |
+| `resume` | Resume participation. |
+| `logs` | Recent agent logs. Takes `--follow` and `--lines N`. |
+| `runtime` | Inference runtime bring-up: `install`, `status`, `remove`. |
+| `upgrade` | Pull the latest agent binary from the control plane and restart. |
+| `version` | Print the agent version and build. |
+| `config` | Show the machine's local deploy-shape configuration. |
+| `identity` | Inspect or reset this machine's identity: `show`, `wipe`. |
+| `uninstall` | Remove the service and binary. `--purge` also destroys the identity. |
+| `help` | All verbs, or details for one: `kibbu help <verb>`. |
+
+Global flags: `--json` for machine-readable output on stdout, `--yes` / `-y` to auto-confirm destructive operations, `--non-interactive` to never prompt.
+
+<Tip>
+  `--json` writes data to stdout and keeps human-readable progress on stderr, so piping a `--json` command into `jq` is always safe.
+</Tip>
+
+## Diagnosing a machine that is not serving
+
+<Steps>
+  <Step title="Is the agent running and enrolled?">
+    ```bash
+    kibbu status
+    ```
+
+    This is the single most useful command. It checks the agent process, the enrollment, the mesh interface and the inference runtime, and names what is wrong.
+  </Step>
+  <Step title="Is it paused?">
+    ```bash
+    kibbu resume
+    ```
+
+    Someone may have paused it from the tray. Pausing is a legitimate thing for a machine's owner to do.
+  </Step>
+  <Step title="Is the inference runtime present?">
+    ```bash
+    kibbu runtime status
+    ```
+
+    A machine with no runtime enrols and reports telemetry but cannot serve. `kibbu runtime install` fetches it.
+  </Step>
+  <Step title="What do the logs say?">
+    ```bash
+    kibbu logs --lines 200
+    ```
+  </Step>
+</Steps>
+
+## Two names, one binary
+
+The command is installed as `kibbu`, with `kibbu-agent` as the underlying binary name. Both work. If `kibbu` is not found on a machine enrolled some time ago, use `kibbu-agent` — and consider running `kibbu upgrade`.
+
+## Pausing without the CLI
+
+A machine's owner does not need the CLI, or administrator rights. The menu-bar / system-tray app pauses participation for 1 hour, 8 hours, 7 days or indefinitely, and resumes at any time. See [Fleet and machines](/concepts/fleet-and-machines).

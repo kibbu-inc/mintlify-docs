@@ -1,0 +1,113 @@
+---
+title: "Statuses"
+description: "Machine states, request outcomes, tiers and job lifecycles."
+icon: "signal"
+---
+
+Every state a machine, a request or a job can report, and what each one means for your traffic.
+
+## Machine states
+
+A machine in the fleet is always in exactly one of eight states. Enrollment starts at `ENROLLING` and reaches `IDLE` once the agent has brought up its mesh interface and reported ready.
+
+| State | Meaning |
+| --- | --- |
+| `ENROLLING` | The agent presented a token and is bringing up its mesh interface. Swept if it does not report ready within the reconcile timeout (5 minutes by default). |
+| `PENDING_APPROVAL` | Waiting for an operator to approve the join. Review-before-join is optional and off by default. |
+| `IDLE` | Enrolled, healthy and eligible. There is capacity here; the machine is not serving right now. |
+| `ACTIVE` | Serving inference. Work runs at low priority and yields the moment the owner returns. |
+| `THROTTLED` | Still enrolled but deliberately held back — thermal pressure, battery, or an owner-first signal. |
+| `DRAINING` | Finishing in-flight work and taking nothing new. The usual path to a clean upgrade or decommission. |
+| `COOLDOWN` | Recently drained. Held out of placement briefly before becoming eligible again. |
+| `OFFLINE` | No recent heartbeat. Placement treats it as gone and reroutes around it. It recovers on its own when the machine reports back. |
+
+Healthy day-to-day traffic moves a machine between `IDLE` and `ACTIVE`. Everything else is either a transition or a stated reason it is sitting out.
+
+## Request outcomes
+
+Each served request records how it ended, and which rung served it — your own hardware, a cloud provider, or a cache.
+
+| Outcome | Meaning |
+| --- | --- |
+| `ok` | Served and completed. |
+| `client_cancel` | Your client closed the connection mid-stream. Surfaces as `499 client_closed`. |
+| `server_error` | Kibbu failed internally. Retryable. |
+| `upstream_error` | The engine or the cloud provider failed, or returned a malformed response. |
+| `edge_cold_pull_failed` | The assigned machine could not download the model in time. |
+
+The admin console's **Requests** view lists these per call, with the machine that served each one.
+
+## Routing tiers
+
+An optional `tier` on the request body sets priority. The four values are fixed.
+
+| Tier | For |
+| --- | --- |
+| `reserved` | Capacity held for you. A saturated cap returns `429` rather than degrading. |
+| `interactive` | The default for user-facing traffic. Optimized for time to first token. |
+| `batch` | Throughput over latency. Right for backfills and evals. |
+| `idle` | Runs on whatever is spare. No latency expectation at all. |
+
+A saturated tier returns `429 tier_concurrency_cap` with a dynamic `Retry-After`. An exhausted monthly quota returns `429 tier_quota_exceeded`, which a retry will not fix.
+
+## Job statuses
+
+Long-running work reports its own lifecycle. Terminal states are final.
+
+<Tabs>
+  <Tab title="Batches">
+    `GET /v1/batches/{id}`
+
+    | Status |  |
+    | --- | --- |
+    | `validating` | Input file is being checked. |
+    | `in_progress` | Lines are being served. |
+    | `paused` | Held; will resume. |
+    | `completed` | Terminal. Output and error files are available. |
+    | `failed` | Terminal. |
+    | `cancelled` | Terminal. |
+  </Tab>
+  <Tab title="Fine-tuning">
+    `GET /v1/fine_tuning/jobs/{id}`
+
+    | Status |  |
+    | --- | --- |
+    | `validating` | Inputs are being checked, and the fleet is being checked for an eligible machine. |
+    | `running` | Training. |
+    | `succeeded` | Terminal. The adapter is available. |
+    | `failed` | Terminal. |
+    | `cancelled` | Terminal. |
+  </Tab>
+</Tabs>
+
+<Note>
+  A fine-tuning job can sit in `validating` for a while on a busy fleet: training needs a machine that is idle, plugged in, and has enough free memory — the same owner-first rules as inference. It is waiting, not stuck.
+</Note>
+
+## Organization states
+
+Two organization-level conditions refuse traffic outright, and neither is a rate limit.
+
+| Condition | Response | Meaning |
+| --- | --- | --- |
+| Suspended | `403 org_suspended` | An operator has disabled the organization. Inference, enrollment, credential renewal and the admin console all refuse. All data is retained. A retry never helps until an operator resumes it. |
+| Deleted | `503 org_deleted` | The organization has been deleted. Every route returns the same code. Data is retained until it is purged, so an operator can still restore it. |
+
+## Fleet status at a glance
+
+```bash
+curl -sS "$KIBBU_BASE_URL/status" -H "Authorization: Bearer $KIBBU_API_KEY"
+```
+
+```json
+{
+  "status": "ok",
+  "nodes_online": 3,
+  "nodes_total": 4,
+  "error_rate_pct": 0.2,
+  "uptime_seconds": 84213,
+  "generated_at": "2026-07-05T12:00:00Z"
+}
+```
+
+`status: "ok"` with `nodes_online > 0` means the fleet can serve you. The endpoint is intentionally small and stable — it is the right target for an uptime monitor.

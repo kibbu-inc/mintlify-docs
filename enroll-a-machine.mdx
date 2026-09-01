@@ -1,0 +1,155 @@
+---
+title: "Enroll a machine"
+sidebarTitle: "Enroll a machine"
+description: "Add a computer to your fleet and confirm it reports as ready to serve."
+icon: "server"
+---
+
+Enrolling puts a computer into your fleet so it can serve inference. This is an **operator** task: it needs an enrollment token from the admin console and administrator rights on the machine.
+
+<Note>
+  An enrollment token is an **install-time** credential. It is not an API key and never belongs in application code. See [API keys](/api-keys) for the credential your requests carry.
+</Note>
+
+## Before you start
+
+- Administrator / `sudo` rights on the machine you are enrolling.
+- Outbound HTTPS to your control plane, and outbound **UDP 51820** for the encrypted mesh. The mesh cannot be proxied.
+- A machine that will be left plugged in for at least some of the day. Kibbu only serves from machines that are idle and on mains power.
+- A platform that can actually run inference — see [Supported platforms](#supported-platforms).
+
+## 1. Issue an enrollment token
+
+In the admin console, go to **Fleet → Add machine**. Choose **Manual** and the operating system, and the console issues a short-lived token and renders the exact command to run.
+
+Tokens can be use-capped and labelled per device. For fleet rollouts, mint a batch of single-use tokens — one per device — so each one can be revoked individually.
+
+## 2. Run the installer
+
+Copy the command from the console. The token travels in a **header**, not the URL:
+
+<CodeGroup>
+
+```bash macOS and Linux
+curl -fsSL -H "X-Kibbu-Enroll-Token: <token>" https://<your-control-plane>/install | sudo bash
+```
+
+```powershell Windows
+iex (iwr -UseBasicParsing -Headers @{"X-Kibbu-Enroll-Token"="<token>"} "https://<your-control-plane>/install.ps1").Content
+```
+
+</CodeGroup>
+
+<Warning>
+  A `?token=` query-string form also works, but avoid it. URLs are recorded by every proxy, CDN and web server they pass through, so a live enrollment token ends up in access logs you do not control. Use the header form the console gives you.
+</Warning>
+
+The `/install` endpoint detects the operating system and serves the right script. The installer downloads the agent, registers it as a system service (launchd, systemd or a Windows service), brings up the encrypted mesh interface, and enrols the machine.
+
+Run the Windows command from an **elevated** PowerShell session. Because `iex (iwr ...)` has no argument list, Windows options are passed as environment variables rather than flags — see the table below.
+
+### The one-liner starts the agent; the MDM script does not
+
+The two install paths differ deliberately, and it is worth knowing which you are on before a rollout:
+
+| Path | Behaviour |
+| --- | --- |
+| `https://<cp>/install` — the console one-liner | Installs **and starts** the agent, so the machine enrols before the command returns. This holds whether or not a terminal is attached. |
+| `https://<cp>/deploy/install-script/{os}` — the MDM path | Installs but does **not** start. Pass `--auto-start` / `-AutoStart` when you want it to join, or start the service later. |
+
+That split lets you stage an install across many machines with your MDM and choose when they join, while keeping the copy-paste path a single step.
+
+## 3. Watch it come online
+
+Open **Fleet** in the admin console. A machine goes `ENROLLING → IDLE`:
+
+- **ENROLLING** — the agent has presented its token and is bringing up its mesh interface.
+- **IDLE** — enrolled, healthy, and eligible. There is capacity here; it is simply not serving right now.
+
+A machine that never reports ready is swept after the reconcile timeout (5 minutes by default) and can be re-enrolled.
+
+From a developer's side, the same fact is one request away:
+
+```bash
+curl -sS "$KIBBU_BASE_URL/status" -H "Authorization: Bearer $KIBBU_API_KEY"
+```
+
+`status: "ok"` with `nodes_online > 0` means the fleet can serve you.
+
+## Supported platforms
+
+The agent installs and enrols on more platforms than can actually serve inference. A machine with no inference runtime available still enrols and reports telemetry — it just never gets given work.
+
+| Platform | Serves inference? |
+| --- | --- |
+| macOS, Apple Silicon (`arm64`) | Yes |
+| macOS, Intel (`amd64`) | Yes |
+| Linux, `x86_64` | Yes |
+| Windows, `x86_64` | Yes |
+| Linux, `arm64` | **No** — no engine payload is published |
+| Windows, `arm64` | **No** — no engine payload is published |
+
+<Warning>
+  Raspberry Pis, ARM cloud instances and ARM Windows laptops enrol and appear healthy in the fleet, but cannot serve. Do not plan capacity around them.
+</Warning>
+
+Within the supported set, a machine with a GPU or Apple Silicon is worth many CPU-only ones, and Kibbu prefers them for interactive traffic.
+
+## Installer options
+
+Most enrollments need none of these. They exist for MDM and for machines with unusual constraints.
+
+| macOS / Linux | Windows | Effect |
+| --- | --- | --- |
+| `--auto-start` | `-AutoStart` | Start the agent immediately. Already implied by the `/install` one-liner. |
+| `--no-start` | `-NoStart` | Install only; do not start or enrol yet. Also `KIBBU_NO_START=1`. |
+| `--accept-eula` | `-AcceptEula` | Accept the licence non-interactively. Also `KIBBU_ACCEPT_EULA=1`. |
+| `--no-tray` | `-NoTray` | Do not install the pause tray app. The tray is installed by default. |
+| `--no-python-sidecar` | `-NoPythonSidecar` | Skip the optional Python runtime used by some model formats. |
+| `--defer-runtime` | `-DeferRuntime` | Do not download the inference runtime during install; the agent fetches it later when idle. |
+| `--allow-telemetry-only` | `-AllowTelemetryOnly` | Enrol even if the machine cannot serve inference, so it still reports to the fleet. |
+| `--verbose` | `-Verbose` | Full installer output instead of the summarised view. |
+
+### Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `KIBBU_CP_URL` | Control plane URL. Set for you by the `/install` bootstrap. |
+| `KIBBU_ENROLL_TOKEN` | Plaintext enrollment token. Set for you by the `/install` bootstrap. |
+| `KIBBU_PROXY` | HTTP(S) proxy applied to every download the installer makes. The mesh (UDP 51820) is **not** proxyable. |
+| `KIBBU_STATE_DIR` | Agent state directory. Defaults to `/var/lib/kibbu-agent`, or `%ProgramData%\kibbu` on Windows. |
+| `KIBBU_WITH_TRAY` | Set `0` to opt out of the tray on Windows, where there is no argument list to pass a flag on. |
+
+## Re-running the installer
+
+Re-running is safe and idempotent. If the state directory still exists, the machine **rejoins as the same machine** — no duplicate appears in the fleet. If the state directory was wiped, a fresh enrollment runs and the control plane flags the duplicate so you can reconcile it rather than silently doubling the machine.
+
+## Rolling out to many machines
+
+For managed fleets, deploy through your existing MDM rather than by hand. Kibbu ships templates for Microsoft Intune, Jamf and Group Policy, and an `.msi` for Windows. Mint one single-use token per device so any one of them can be revoked on its own. Ask your Kibbu contact for the deployment kit.
+
+Remember that the MDM script does not auto-start — pass `--auto-start` / `-AutoStart` in your deployment command when you want machines to join immediately.
+
+## If it does not come online
+
+<AccordionGroup>
+  <Accordion title="The machine never leaves ENROLLING">
+    Almost always outbound **UDP 51820** being blocked — the agent enrolled over HTTPS but cannot bring up the mesh. Check the firewall between the machine and the control plane. HTTP proxies do not help here; the mesh is not proxyable.
+  </Accordion>
+
+  <Accordion title="The installer finished but nothing appears in the fleet">
+    If you used the MDM script rather than the console one-liner, it installed without starting. Start the service, or re-run with `--auto-start` / `-AutoStart`.
+  </Accordion>
+
+  <Accordion title="The machine is online but never serves anything">
+    Usually correct behaviour. Kibbu only places work on machines that are idle, on mains power, and have enough free memory for the model. A laptop in active use, on battery, or with an enabled model too large for its memory sits at `IDLE`. Check the architecture too — see [Supported platforms](#supported-platforms). Run `kibbu status` on the machine for a local diagnosis.
+  </Accordion>
+
+  <Accordion title="Requests return model_too_large_for_fleet">
+    No machine has enough free memory for that model, even with several machines sharing it. Enable a smaller model, or add a machine with more memory.
+  </Accordion>
+</AccordionGroup>
+
+## Removing a machine
+
+Run `kibbu uninstall` on the machine, or the uninstaller shipped alongside the installer. `--purge` also destroys the machine's identity, so a later re-install enrols as a new machine. Decommissioning it in the admin console stops work being placed on it without touching the machine itself.

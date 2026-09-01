@@ -1,0 +1,99 @@
+---
+title: "Fleet and machines"
+description: "When a machine is eligible to serve, and when it deliberately stays out of the way."
+icon: "server"
+---
+
+Your **fleet** is the set of machines enrolled into your organization. A machine being in the fleet does not mean it is serving — Kibbu is deliberately conservative about when it uses someone's computer.
+
+## Owner-first, always
+
+The person whose laptop serves a request should never notice. That principle is enforced in several places at once, not as a single setting:
+
+<CardGroup cols={2}>
+  <Card title="Only when idle" icon="moon">
+    A machine must have been untouched for a couple of minutes before it takes work. Touch the keyboard and in-flight work yields.
+  </Card>
+
+  <Card title="Only on mains power" icon="plug">
+    Machines on battery, or below a battery floor, are excluded. Kibbu does not drain someone's laptop.
+  </Card>
+
+  <Card title="Never when hot" icon="temperature-high">
+    A machine under thermal pressure is excluded, so nobody gets fans at full speed during a meeting.
+  </Card>
+
+  <Card title="Never the last of memory" icon="memory">
+    Free memory is checked against the model, with headroom reserved for the owner's own applications.
+  </Card>
+</CardGroup>
+
+When an owner comes back mid-request, their machine yields. Kibbu reroutes and the caller sees a completed answer, not an error.
+
+## The pause tray
+
+Machines install a small menu-bar / system-tray app. Its owner can pause participation for **1 hour**, **8 hours**, **7 days**, or indefinitely, and resume at any time. No admin rights, no ticket.
+
+This is worth telling your users about. In practice, a visible pause switch means almost nobody uses it — people object to a machine they cannot control, not to a machine that is helping.
+
+Operators can lock the pause control on managed fleets; the tray then reports that pausing is unavailable rather than silently failing.
+
+## Machine states
+
+A machine is always in exactly one state.
+
+| State | Meaning |
+| --- | --- |
+| `ENROLLING` | The agent presented a token and is bringing up its mesh interface. |
+| `PENDING_APPROVAL` | Waiting for an operator to approve the join. Review-before-join is optional and off by default. |
+| `IDLE` | Enrolled, healthy and eligible. There is capacity here; it is not serving right now. |
+| `ACTIVE` | Serving inference. |
+| `THROTTLED` | Still enrolled but deliberately held back — thermal pressure, battery, or an owner-first signal. |
+| `DRAINING` | Finishing in-flight work and taking nothing new. The usual path to a clean upgrade or decommission. |
+| `COOLDOWN` | Recently drained. Held out of placement briefly before becoming eligible again. |
+| `OFFLINE` | No recent heartbeat. Placement treats it as gone and reroutes around it. It recovers on its own when the machine reports back. |
+
+Healthy day-to-day traffic moves a machine between `IDLE` and `ACTIVE`. Everything else is a transition or a reason it is sitting out.
+
+## What a machine reports
+
+The agent sends a small periodic heartbeat so the control plane can decide where to place work: free and total memory, CPU load, power source and battery level, how long the machine has been idle, thermal pressure, which models it already has cached, and its own version.
+
+It does **not** send prompts, responses, filenames, or anything about what the owner is doing. See [Data handling](/reference/data-handling).
+
+## Why a healthy machine might not be serving
+
+This is the most common support question, and the answer is usually "working as intended":
+
+<AccordionGroup>
+  <Accordion title="Someone is using it">
+    Idle gating. It becomes eligible again shortly after they stop.
+  </Accordion>
+
+  <Accordion title="It is on battery">
+    Excluded until it is plugged back in.
+  </Accordion>
+
+  <Accordion title="The model does not fit">
+    Enabled models are matched against each machine's free memory and hardware. A large model simply will not be placed on a small machine — and if no machine can hold it, requests return `model_too_large_for_fleet`.
+  </Accordion>
+
+  <Accordion title="It has not downloaded the model yet">
+    The first request for a model the fleet has not cached returns `model_warming_up` while machines fetch the weights. Subsequent requests are fast.
+  </Accordion>
+
+  <Accordion title="Its hardware is too slow for interactive use">
+    A model can fit in memory and still be too slow to answer at a usable speed. Kibbu refuses that placement with `model_too_heavy_for_interactive` rather than serving something unusably slow.
+  </Accordion>
+</AccordionGroup>
+
+## What makes a good fleet machine
+
+In rough order of impact:
+
+1. **A GPU or Apple Silicon.** An accelerated machine is worth many CPU-only ones, and Kibbu prefers them for interactive traffic.
+2. **Memory.** It decides which models can run at all. More memory beats a faster processor.
+3. **Left plugged in.** Desktops, docked laptops and lab machines contribute far more than laptops that travel.
+4. **A wired network,** if machines will share a model between them.
+
+CPU-only machines still count — they just serve smaller models, and slower.

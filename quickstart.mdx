@@ -1,0 +1,204 @@
+---
+title: "Quickstart"
+description: "Get a key, discover a model, and make your first OpenAI-compatible request."
+icon: "bolt"
+---
+
+Get a key and make your first OpenAI-compatible request against a Kibbu fleet.
+
+<Note>
+  Your organization needs at least one enrolled machine reporting as ready. If you are the one putting machines into the fleet, start with [Enroll a machine](/enroll-a-machine) — enrollment is an operator task, not an API one.
+</Note>
+
+<Steps>
+  <Step title="Get an API key">
+    Inference requests authenticate with a **per-organization API key**, not an enrollment token.
+
+    1. Open the admin console and go to **API keys**.
+    2. Select **Create key**. The plaintext key is shown **once** — copy it now.
+    3. Store it as an environment variable. Never commit it.
+
+    ```bash
+    export KIBBU_BASE_URL="https://<your-control-plane>/v1"
+    export KIBBU_API_KEY="kibbu_..."   # paste the key you just created
+    ```
+
+    The key is scoped to your organization: every request is billed and rate-limited against it, and only sees your organization's models.
+  </Step>
+  <Step title="Discover a model">
+    Never hardcode a model id — which models your organization can call is decided by your fleet operator.
+
+    ```bash
+    curl -sS "$KIBBU_BASE_URL/models" \
+      -H "Authorization: Bearer $KIBBU_API_KEY"
+    ```
+
+    ```json
+    {
+      "object": "list",
+      "data": [
+        { "id": "<a-model-id>", "object": "model", "owned_by": "kibbu" }
+      ]
+    }
+    ```
+
+    Pick an `id` from `data` and keep it in an environment variable so the rest of this guide stays copy-pasteable:
+
+    ```bash
+    export KIBBU_MODEL="<paste-a-model-id-from-the-list-above>"
+    ```
+  </Step>
+  <Step title="Make a chat completion">
+    Point any OpenAI client at `$KIBBU_BASE_URL`. Nothing else about your code changes.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -sS "$KIBBU_BASE_URL/chat/completions" \
+      -H "Authorization: Bearer $KIBBU_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "'"$KIBBU_MODEL"'",
+        "messages": [
+          { "role": "user", "content": "Say hello in one short sentence." }
+        ]
+      }'
+    ```
+
+    ```python Python
+    import os
+    from openai import OpenAI
+    
+    client = OpenAI(
+        base_url=os.environ["KIBBU_BASE_URL"],
+        api_key=os.environ["KIBBU_API_KEY"],
+    )
+    
+    res = client.chat.completions.create(
+        model=os.environ["KIBBU_MODEL"],
+        messages=[{"role": "user", "content": "Say hello in one short sentence."}],
+    )
+    print(res.choices[0].message.content)
+    ```
+
+    ```javascript JavaScript
+    import OpenAI from "openai";
+    
+    const client = new OpenAI({
+      baseURL: process.env.KIBBU_BASE_URL,
+      apiKey: process.env.KIBBU_API_KEY,
+    });
+    
+    const res = await client.chat.completions.create({
+      model: process.env.KIBBU_MODEL,
+      messages: [{ role: "user", content: "Say hello in one short sentence." }],
+    });
+    console.log(res.choices[0].message.content);
+    ```
+
+    </CodeGroup>
+
+    The response is the standard OpenAI `chat.completion` object:
+
+    ```json
+    {
+      "id": "chatcmpl-...",
+      "object": "chat.completion",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "Hello!" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": { "prompt_tokens": 12, "completion_tokens": 3, "total_tokens": 15 }
+    }
+    ```
+  </Step>
+  <Step title="Stream the response">
+    Set `stream: true` for a Server-Sent Events stream of `chat.completion.chunk` objects, terminated by `data: [DONE]`.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -sS -N "$KIBBU_BASE_URL/chat/completions" \
+      -H "Authorization: Bearer $KIBBU_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "'"$KIBBU_MODEL"'",
+        "stream": true,
+        "messages": [{ "role": "user", "content": "Count to five." }]
+      }'
+    ```
+
+    ```python Python
+    stream = client.chat.completions.create(
+        model=os.environ["KIBBU_MODEL"],
+        messages=[{"role": "user", "content": "Count to five."}],
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+    ```
+
+    ```javascript JavaScript
+    const stream = await client.chat.completions.create({
+      model: process.env.KIBBU_MODEL,
+      messages: [{ role: "user", content: "Count to five." }],
+      stream: true,
+    });
+    for await (const chunk of stream) {
+      process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
+    }
+    ```
+
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Handle the errors you will actually see
+
+Every error uses the OpenAI envelope — `{"error": {"message", "type", "code"}}`. Branch on `code`, never on the message text. Three codes cover most first-day surprises:
+
+| HTTP | `code` | What to do |
+| --- | --- | --- |
+| `401` | `invalid_api_key` | Missing or invalid bearer. Keys start with `kibbu_`. |
+| `404` | `model_not_found` | Re-read `GET /v1/models` — that id is not enabled for your organization. |
+| `503` | `model_warming_up` | First call for a model the fleet has not cached yet. Retry after `Retry-After` (30s). |
+
+The full vocabulary is in [Error codes](/reference/errors).
+
+## Check there is capacity
+
+If requests are failing with `no_eligible_node` or `fleet_busy`, confirm the fleet has machines online:
+
+```bash
+curl -sS "$KIBBU_BASE_URL/status" \
+  -H "Authorization: Bearer $KIBBU_API_KEY"
+```
+
+```json
+{
+  "status": "ok",
+  "nodes_online": 3,
+  "nodes_total": 4,
+  "error_rate_pct": 0.2,
+  "uptime_seconds": 84213,
+  "generated_at": "2026-07-05T12:00:00Z"
+}
+```
+
+`status: "ok"` with `nodes_online > 0` means the fleet can serve you. The endpoint is intentionally tiny and stable — point uptime monitors at it too.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="How Kibbu works" icon="diagram-project" href="/concepts/how-kibbu-works">
+    What actually happens to a request after you send it.
+  </Card>
+
+  <Card title="Kibbu extensions" icon="sliders" href="/api/extensions">
+    Optional fields: routing tier, adapters, reasoning controls.
+  </Card>
+</CardGroup>

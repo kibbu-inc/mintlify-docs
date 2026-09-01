@@ -1,0 +1,91 @@
+---
+title: "Embeddings and rerank"
+sidebarTitle: "Embeddings"
+description: "POST /v1/embeddings and the /v1/rerank extension."
+icon: "vector-square"
+---
+
+## Embeddings
+
+`POST /v1/embeddings` takes the standard OpenAI request body.
+
+```bash
+curl -sS "$KIBBU_BASE_URL/embeddings" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "<an-embedding-model-id>",
+    "input": ["first document", "second document"]
+  }'
+```
+
+<ParamField body="model" type="string" required>
+  An **embedding** model id. A chat model here returns `400 model_kind_mismatch`.
+</ParamField>
+
+<ParamField body="input" type="string | string[]" required>
+  One string or an array of strings. Exceeding the per-request document cap returns `400 too_many_documents`.
+</ParamField>
+
+<ParamField body="dimensions" type="integer">
+  Truncate the returned vectors. Models that cannot do this return `400 dimensions_not_supported_by_model`.
+</ParamField>
+
+<ParamField body="encoding_format" default="float" type="string">
+  `float` or `base64`.
+</ParamField>
+
+<ParamField body="return_sparse" type="boolean">
+  Kibbu extension. Request sparse (lexical) vectors alongside dense ones, on models that produce them.
+</ParamField>
+
+<ParamField body="tier" type="string">
+  Kibbu extension. Routing priority — embedding backfills usually belong in `batch`.
+</ParamField>
+
+### Errors
+
+| HTTP | `code` | Meaning |
+| --- | --- | --- |
+| `400` | `model_not_enabled_for_org` | The model exists but is not enabled for your organization. |
+| `400` | `dimensions_not_supported_by_model` | `dimensions` is not supported here. |
+| `400` | `too_many_documents` | Input array exceeds the per-request cap. Split it. |
+| `503` | `model_not_loaded` | No machine has the model warm yet. Retry shortly. |
+
+## Rerank
+
+`POST /v1/rerank` is a **Kibbu extension** — there is no OpenAI equivalent. It scores documents against a query with a cross-encoder, which is more accurate than comparing embeddings and is the usual second stage of a retrieval pipeline. The request shape mirrors Cohere's.
+
+```bash
+curl -sS "$KIBBU_BASE_URL/rerank" \
+  -H "Authorization: Bearer $KIBBU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "<a-rerank-model-id>",
+    "query": "how do I rotate an API key?",
+    "documents": ["...", "...", "..."],
+    "top_n": 3
+  }'
+```
+
+<ParamField body="query" type="string" required>
+  The query to score each document against.
+</ParamField>
+
+<ParamField body="documents" type="string[]" required>
+  The candidate documents.
+</ParamField>
+
+<ParamField body="top_n" type="integer">
+  Return only the best N results.
+</ParamField>
+
+<ParamField body="return_documents" type="boolean">
+  Echo the document text in each result instead of only its index.
+</ParamField>
+
+Results come back scored and sorted.
+
+<Note>
+  Because rerank is not part of the OpenAI surface, the OpenAI clients have no method for it — call it with a plain HTTP request.
+</Note>

@@ -1,0 +1,59 @@
+---
+title: "Models"
+description: "Discovering which models your organization can call."
+icon: "cube"
+---
+
+```bash
+curl -sS "$KIBBU_BASE_URL/models" \
+  -H "Authorization: Bearer $KIBBU_API_KEY"
+```
+
+```json
+{
+  "object": "list",
+  "data": [
+    { "id": "<a-model-id>", "object": "model", "owned_by": "kibbu" }
+  ]
+}
+```
+
+Fetch one by id with `GET /v1/models/{model_id}`. Model ids can contain `/`, and the route handles that — no escaping needed.
+
+## Discover, never hardcode
+
+The list is **per organization**. It reflects what your fleet operator has enabled, which changes as machines are added and as the catalog grows. A model id that worked last month can stop being enabled.
+
+<Warning>
+  Hardcoding a model id is the most common way to break a Kibbu integration. Read `GET /v1/models` at startup, or keep the id in configuration — not in a string literal.
+</Warning>
+
+A request naming a model that is not enabled returns `404 model_not_found`. That is a catalog fact, not a capacity problem: retrying will not help, and the fix is either to pick a different id or to ask your operator to enable it.
+
+## How models get enabled
+
+Enabling is an operator action in the admin console, under **Models**.
+
+Models are grouped into four tiers, which are about the _job_ rather than the mechanism:
+
+| Tier | For |
+| --- | --- |
+| **Fast** | Quick, cheap, high-volume work. |
+| **Balanced** | The general-purpose default. |
+| **Code** | Programming and tool use. |
+| **Frontier** | The largest, most capable models. Needs the most capable machines. |
+
+A new organization starts with **Fast** and **Balanced** available and the other two off. Enabling a model tells the fleet to start caching its weights; the first request afterwards may return `model_warming_up` while that happens.
+
+## What decides whether a model can run
+
+Enabling a model is necessary but not sufficient. The fleet must also be able to hold it:
+
+- **Memory** decides whether the model can be loaded at all, on one machine or split across several.
+- **Hardware class** decides whether it can answer fast enough to be worth serving interactively.
+
+The console shows, per model, whether your fleet can run it before you enable it. If it cannot, requests return `model_too_large_for_fleet` (no machine has the memory) or `model_too_heavy_for_interactive` (it fits, but would be unusably slow) — two different problems with two different fixes.
+
+## Chat models and embedding models are not interchangeable
+
+Addressing an embedding model at `/v1/chat/completions`, or a chat model at `/v1/embeddings`, returns `400 model_kind_mismatch`. Kibbu will not silently substitute.

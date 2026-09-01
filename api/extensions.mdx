@@ -1,0 +1,139 @@
+---
+title: "Kibbu extensions"
+description: "Optional fields Kibbu adds to the OpenAI request shapes."
+icon: "sliders"
+---
+
+Kibbu adds a handful of **additive, optional** fields to the OpenAI request bodies. A client that never sets them sees byte-identical behaviour, so an ordinary OpenAI SDK stays an ordinary OpenAI SDK.
+
+All of them are set the same way — put the key in the JSON body. With the OpenAI clients that means `extra_body` in Python, or just adding the key in JavaScript.
+
+## Routing tier
+
+<ParamField body="tier" default="interactive" type="string">
+  `reserved` | `interactive` | `batch` | `idle`. Sets the request's routing priority. An unknown value returns `400 invalid_tier`.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+res = client.chat.completions.create(
+    model=MODEL,
+    messages=[{"role": "user", "content": "Summarise this backlog."}],
+    extra_body={"tier": "batch"},
+)
+```
+
+```javascript JavaScript
+const res = await client.chat.completions.create({
+  model: MODEL,
+  messages: [{ role: "user", content: "Summarise this backlog." }],
+  tier: "batch",
+});
+```
+
+</CodeGroup>
+
+Moving bulk work to `batch` or `idle` is the cheapest way to protect interactive latency. See [The routing ladder](/concepts/routing-ladder).
+
+## Adapters
+
+If your operator has published a fine-tuned adapter, you can select it three ways. Precedence is `personal_lora_id`, then `lora_id`, then the model suffix.
+
+<ParamField body="lora_id" type="string">
+  An organization adapter. Must match `^[a-zA-Z0-9_.-]{1,128}$`, or you get `400 lora_malformed`.
+</ParamField>
+
+<ParamField body="personal_lora_id" type="string">
+  A per-user adapter. Requires the OpenAI `user` field to be set as well, or you get `400 personal_lora_requires_user`.
+</ParamField>
+
+The suffix form needs no extension support at all, so it works with a completely stock client:
+
+```json
+{ "model": "<base-model-id>:support-v3", "messages": [] }
+```
+
+An adapter that does not exist, is not enabled for you, or belongs to another user all return the same `404 lora_not_enabled` — deliberately, so the error cannot be used to probe for adapters you cannot access. An adapter whose base model does not match returns `400 lora_base_incompatible`.
+
+## Reasoning
+
+For models that reason before answering.
+
+<ParamField body="reasoning_effort" type="string">
+  How much thinking to spend. An out-of-enum value returns `400 invalid_reasoning_effort`.
+</ParamField>
+
+<ParamField body="thinking" type="object">
+  `{ "budget_tokens": <integer> }`. A negative or malformed budget returns `400 invalid_thinking_budget`.
+</ParamField>
+
+Reasoning output comes back separately from the answer — as `reasoning` on the choice, `reasoning_content` on a streaming delta, and `usage.reasoning_tokens` on the usage block. It is never mixed into `content`, so a client that ignores those fields shows the user the answer alone.
+
+## Prompt templates
+
+If your operator keeps prompts in Kibbu's registry, reference one instead of sending message text.
+
+<ParamField body="prompt" type="string">
+  A saved prompt id. Unknown ids return `404 prompt_not_found`; an unknown version returns `404 prompt_version_not_found`.
+</ParamField>
+
+<ParamField body="prompt_variables" type="object">
+  Values for the template's variables. A missing one returns `400 prompt_variable_missing`.
+</ParamField>
+
+## Prompt caching
+
+<ParamField body="cache_control" type="object">
+  Set on a message to mark a reusable prefix, so a long shared preamble is not reprocessed on every call. Malformed blocks return `400 invalid_cache_control`.
+</ParamField>
+
+## Confidential routing
+
+<ParamField body="confidential_inference" type="boolean">
+  Route only to machines with hardware attestation. If none is available, the request fails with `503 confidential_no_attested_nodes_available` rather than falling back to an unattested machine.
+</ParamField>
+
+<ParamField body="oblivious_planning" type="boolean">
+  Additionally hide placement metadata. Requires `confidential_inference`, or you get `400 oblivious_requires_confidential`.
+</ParamField>
+
+<Warning>
+  This is opt-in and depends on attested hardware being present in your fleet. Confirm with your operator before designing around it.
+</Warning>
+
+## Response persistence
+
+<ParamField body="store" default="true" type="boolean">
+  On `POST /v1/responses`. Send `false` and the response is not persisted and not retrievable afterwards — that is the point. See [Data handling](/reference/data-handling).
+</ParamField>
+
+## Response headers
+
+Kibbu sets a few response headers you may want to read.
+
+| Header | Meaning |
+| --- | --- |
+| `X-Kibbu-Slow-Serve` | Served on hardware below the interactive speed floor, because that beat refusing. Expect a slow answer. |
+| `X-Kibbu-Budget-Warning` | Your organization has passed this percentage of its spend budget. The request was still served. |
+| `x-ratelimit-limit-requests` | The tier's concurrent-request cap. |
+| `x-ratelimit-remaining-requests` | Slots left under that cap right now. |
+| `x-ratelimit-limit-tokens` | The tier's monthly token quota. |
+| `x-ratelimit-remaining-tokens` | Tokens left this billing period. |
+| `x-ratelimit-reset-tokens` | Seconds until the monthly quota resets. |
+
+## Signed receipts
+
+Kibbu can attest which machine produced a response. Fetch the receipt for a request afterwards, and verify it against the fleet's published keys:
+
+```bash
+curl -sS "$KIBBU_BASE_URL/receipts/by-request/<request_id>" \
+  -H "Authorization: Bearer $KIBBU_API_KEY"
+
+curl -sS "$KIBBU_BASE_URL/receipts/trust-roots" \
+  -H "Authorization: Bearer $KIBBU_API_KEY"
+```
+
+A receipt carries identifiers and one-way digests of the prompt and response — enough to prove a given response came from a given machine, without containing the response.
+
+To have receipts delivered inline on a streaming response instead, send the opt-in request header `X-Kibbu-Receipt: sse`. Kibbu only emits the extra SSE event frame when a client has declared it understands one, so streaming clients that have not opted in are never surprised by an unexpected event type.

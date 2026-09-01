@@ -1,0 +1,89 @@
+---
+title: "The routing ladder"
+description: "One machine, then several, then cloud — in that order, and what happens when a rung cannot serve."
+icon: "stairs"
+---
+
+Every request walks the same ladder, in the same order, stopping at the first rung that can serve it.
+
+<Steps>
+  <Step title="One of your machines">
+    The cheapest and fastest outcome. Kibbu picks an eligible machine that can hold the whole model — preferring one that already has the weights cached and hardware that can answer at interactive speed.
+  </Step>
+  <Step title="Several of your machines">
+    If no single machine can hold the model, Kibbu splits it across a few and streams the work between them. See [How Kibbu works](/concepts/how-kibbu-works).
+  </Step>
+  <Step title="A cloud provider">
+    Only if your operator has configured one, and only if the local rungs could not serve. This costs money, so every call is recorded with the reason it left.
+  </Step>
+</Steps>
+
+If no rung can serve, the request fails with `fleet_busy` — an honest "nothing could serve this right now", not a silent downgrade.
+
+## The rule that matters
+
+**Kibbu diverts, or it tells you. It never silently gives you something lesser.**
+
+If you asked for a model and the fleet cannot run it, you get a typed error naming the reason — not a quietly substituted smaller model. If your request needed a capability the local rung lacks, it is either routed somewhere that has it or refused by name.
+
+That is why the error vocabulary is as specific as it is: `model_too_large_for_fleet` and `model_too_heavy_for_interactive` are different problems with different fixes, and collapsing them into one "unavailable" would cost you the diagnosis.
+
+## Cloud is opt-in
+
+The cloud rung exists only if your operator configured a provider. On a fleet with none, a request the local rungs cannot serve returns `cloud_not_configured` rather than reaching out anywhere.
+
+When cloud is configured, three things can still stop it:
+
+| `code` | Meaning |
+| --- | --- |
+| `cloud_spend_cap_exceeded` | The monthly cloud budget is spent. Cloud stays off until the period resets or the cap is raised. |
+| `cloud_circuit_open` | The provider is unhealthy. Kibbu fails fast for a cooldown instead of hanging on a broken upstream. |
+| `budget_exceeded` | The organization's overall spend budget is exhausted. |
+
+A cloud-served request is subject to that provider's terms for the data it receives. Kibbu cannot promise otherwise for infrastructure it does not run, so it does not.
+
+## Routing tiers
+
+An optional `tier` on the request body sets priority. The four values are fixed.
+
+<CardGroup cols={2}>
+  <Card title="reserved" icon="lock">
+    Capacity held for you. A saturated cap returns `429` rather than degrading.
+  </Card>
+
+  <Card title="interactive" icon="bolt">
+    The default for user-facing traffic. Optimized for time to first token.
+  </Card>
+
+  <Card title="batch" icon="layer-group">
+    Throughput over latency. Right for backfills and evals.
+  </Card>
+
+  <Card title="idle" icon="moon">
+    Runs on whatever is spare. No latency expectation at all.
+  </Card>
+</CardGroup>
+
+```json
+{
+  "model": "...",
+  "tier": "batch",
+  "messages": [{ "role": "user", "content": "..." }]
+}
+```
+
+A saturated tier returns `429 tier_concurrency_cap` with a dynamic `Retry-After`. An exhausted monthly quota returns `429 tier_quota_exceeded`, which a retry will not fix.
+
+<Tip>
+  Moving bulk work to `batch` or `idle` is the single most effective thing you can do to keep interactive traffic fast on a busy fleet.
+</Tip>
+
+## Recovering from a lost machine
+
+Machines are laptops. They get closed, unplugged and picked up mid-request. Kibbu re-routes around a machine that disappears, and a request already streaming can be moved and completed.
+
+Where it genuinely cannot recover, you get `node_unavailable` — the machine pinned to your conversation was lost. Retrying is the right response.
+
+## Seeing where a request went
+
+The admin console attributes every request to the rung that served it and, for cloud, what it cost. **Usage** shows the split over time; **Requests** shows individual calls. That is how you answer "why is our cloud bill non-zero this month" with a list rather than a guess.

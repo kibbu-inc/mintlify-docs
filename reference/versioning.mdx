@@ -1,0 +1,65 @@
+---
+title: "Versioning and deprecation"
+sidebarTitle: "Versioning"
+description: "What can change under /v1, what cannot, and how removals are announced."
+icon: "code-branch"
+---
+
+`/v1` is **frozen additive-only**. Things get added; nothing that has shipped changes meaning underneath you.
+
+## What will never change without a major version
+
+- Removing or renaming a JSON field, query parameter, path segment or header that has shipped.
+- Changing the type, units or semantics of an existing field.
+- Changing an `error.code` string, or the shape of the error envelope.
+
+## What may change at any time, without notice
+
+- New **optional** JSON fields, headers, endpoints and enum values.
+- Tighter validation of input that was never valid. Fixing a parser that accidentally accepted malformed input is not a breaking change.
+
+<Warning>
+  **Your obligation: ignore unknown response fields.** Responses gain fields without notice. The official OpenAI clients tolerate this; a hand-rolled strict parser will not. If you validate responses, use a permissive schema.
+</Warning>
+
+The same applies to enum values. Treat an unrecognised `code` or status as the nearest sensible default rather than crashing — that is what keeps a client working across upgrades.
+
+## How removals are announced
+
+Nothing is ever removed silently. A deprecated route carries three standard headers on **every** response, well before it stops working:
+
+```http
+Deprecation: @1781136000
+Sunset: Sat, 12 Dec 2026 00:00:00 GMT
+Link: </v1/chat/completions>; rel="successor-version"
+```
+
+| Header | Meaning |
+| --- | --- |
+| `Deprecation` | When the endpoint became deprecated. |
+| `Sunset` | When it stops working. |
+| `Link` | Where to go instead, as `rel="successor-version"`. |
+
+The gap between the first release carrying `Deprecation` and the sunset date is **at least 60 days** for the inference API, and at least two release cycles.
+
+After the sunset date the route may be removed. It then returns `404` or `410` — never a silent behaviour change on the same path.
+
+<Tip>
+  Logging the presence of a `Deprecation` header in your HTTP client is a two-line change that turns a future outage into a calendar entry.
+</Tip>
+
+## Model ids are not part of the freeze
+
+The API surface is frozen; the **catalog** is not. Which models your organization can call changes as your operator enables and retires them, and as machines join or leave the fleet.
+
+That is why every guide here says the same thing: read `GET /v1/models` rather than hardcoding an id. See [Models](/api/models).
+
+## The machine-readable spec
+
+Your control plane serves its own OpenAPI document, generated from the same source as the routes it actually serves:
+
+```bash
+curl -sS https://<your-control-plane>/v1/openapi.yaml
+```
+
+Diffing that between upgrades is the most reliable way to see exactly what changed for you.

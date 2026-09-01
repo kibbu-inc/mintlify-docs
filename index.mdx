@@ -1,0 +1,76 @@
+---
+title: "Introduction"
+description: "Kibbu serves your AI traffic on the computers your company already owns."
+icon: "book-open"
+---
+
+Kibbu serves your AI traffic on the computers your company already owns — cloud is the overflow, not the default.
+
+Applications point an existing OpenAI client at Kibbu's OpenAI-compatible API. Each request goes to your own hardware first: machines that are idle, plugged in, and capable. When the fleet cannot serve a request, Kibbu falls back to a configured cloud provider instead — and you can name every call that left, and why.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Get a key, discover a model, make a request.
+  </Card>
+
+  <Card title="Enroll a machine" icon="server" href="/enroll-a-machine">
+    Add a computer to your fleet and confirm it is ready to serve.
+  </Card>
+
+  <Card title="How Kibbu works" icon="diagram-project" href="/concepts/how-kibbu-works">
+    The mechanics of splitting a model across machines.
+  </Card>
+
+  <Card title="API surface" icon="code" href="/api/surface">
+    What is served under `/v1`, and what is deliberately absent.
+  </Card>
+</CardGroup>
+
+## What Kibbu is
+
+A lightweight agent installs on the Macs, Windows machines and Linux boxes your company already manages — silently through your MDM, or with a one-line installer and an enrollment token. Enrolled machines form a **fleet**, coordinated by the Kibbu control plane.
+
+Your application changes one base URL. Nothing else about your code changes.
+
+The person whose laptop serves a request never notices. Work runs only on idle, plugged-in machines, and yields the moment the owner comes back.
+
+<CardGroup cols={2}>
+  <Card title="Local rung" icon="house">
+    Your own fleet — a single machine, or several machines sharing one model. Served on hardware you already paid for.
+  </Card>
+
+  <Card title="Cloud rung" icon="cloud">
+    A configured upstream provider, reached only when the local rung cannot serve. It costs money, and every call is named.
+  </Card>
+</CardGroup>
+
+## Two roles
+
+Most teams split these between two people. The guides are written so you can read only your half.
+
+| Role | Does |
+| --- | --- |
+| **Fleet operator** | Issues enrollment tokens, installs the agent on machines, enables models, sets budgets. |
+| **Developer** | Creates an API key and calls `/v1`. |
+
+If you only consume the API, start at [Quickstart](/quickstart). If you are putting machines into the fleet, start at [Enroll a machine](/enroll-a-machine).
+
+## Conventions used in these guides
+
+Every example uses the same three environment variables.
+
+| Variable | What it is |
+| --- | --- |
+| `KIBBU_BASE_URL` | Your control plane's `/v1` base, for example `https://<your-control-plane>/v1`. The admin console shows the exact host. Never commit a real host into source. |
+| `KIBBU_API_KEY` | A per-organization API key. It starts with `kibbu_` and is created in the admin console under **API keys**. Treat it like a password. |
+| `KIBBU_MODEL` | A model id **discovered at runtime** via `GET /v1/models` — never hardcoded. Which models your organization can call depends on what your fleet operator has enabled. |
+
+## Stability
+
+`/v1` is frozen additive-only: fields and endpoints are added, never silently changed or removed. Removals go through a `Deprecation` / `Sunset` / `Link` header procedure. Machine-readable error codes are catalogued in [Error codes](/reference/errors) and are never reused for a different meaning.
+
+Clients must ignore unknown response fields.
+
+<Note>
+  Kibbu is OpenAI-compatible, so the official `openai` Python and JavaScript libraries work against it unchanged. There is no Kibbu-specific SDK to install — see [Client compatibility](/reference/client-compatibility).
+</Note>

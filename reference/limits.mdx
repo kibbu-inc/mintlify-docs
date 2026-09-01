@@ -1,0 +1,91 @@
+---
+title: "Rate limits and quotas"
+sidebarTitle: "Limits and quotas"
+description: "The caps that can refuse a request, and which ones a retry fixes."
+icon: "gauge"
+---
+
+Four different things can refuse a request for reasons of volume rather than correctness. They are separate mechanisms with separate fixes, so it is worth knowing which one you hit.
+
+## Rate-limit headers
+
+Successful responses carry your current position against the tier caps:
+
+| Header | Meaning |
+| --- | --- |
+| `x-ratelimit-limit-requests` | The tier's concurrent-request cap. |
+| `x-ratelimit-remaining-requests` | Slots left under that cap right now. |
+| `x-ratelimit-reset-requests` | When a slot is expected to free, for example `5s`. |
+| `x-ratelimit-limit-tokens` | The tier's monthly token quota. |
+| `x-ratelimit-remaining-tokens` | Tokens left this billing period. |
+| `x-ratelimit-reset-tokens` | Seconds until the monthly quota resets. |
+
+Reading `remaining` and slowing down before you hit zero is cheaper than handling `429`s.
+
+## 1. Tier caps
+
+Each routing tier has a concurrency cap and a monthly token quota.
+
+| `code` | HTTP | Retry helps? |  |
+| --- | --- | --- | --- |
+| `tier_concurrency_cap` | 429 | **Yes** | The tier is momentarily saturated. `Retry-After` is dynamic. |
+| `tier_quota_exceeded` | 429 | **No** | The tier's monthly token quota is spent for this billing period. |
+
+The fix for a saturated tier is usually to move non-urgent work down a tier rather than to retry harder — `batch` and `idle` have their own budgets, so bulk work stops competing with user-facing traffic.
+
+## 2. Organization caps
+
+Set per tenant by your operator: requests per minute, concurrent streams, and tokens per day.
+
+| `code` | HTTP | Retry helps? |  |
+| --- | --- | --- | --- |
+| `org_quota_exceeded` | 429 | **Yes** | `Retry-After` names the seconds until the breached window's boundary. |
+
+## 3. Spend budgets
+
+These are about money, not throughput.
+
+| `code` | HTTP | Retry helps? |  |
+| --- | --- | --- | --- |
+| `budget_exceeded` | 402 | **No** | The monthly spend budget is exhausted, or an operator has activated a runaway-usage kill switch. |
+| `cloud_spend_cap_exceeded` | 503 | **No** | The cloud-fallback budget is spent. Local rungs keep serving; only cloud is off. |
+
+Before it refuses, Kibbu warns: once you pass a threshold of your budget, successful responses carry `X-Kibbu-Budget-Warning` with the percentage used. Alerting on that header is how you avoid a surprise `402`.
+
+<Tip>
+  `cloud_spend_cap_exceeded` is often a fleet-capacity signal in disguise. If you are burning cloud budget, your local rung is failing to serve more often than you expect — worth looking at before raising the cap.
+</Tip>
+
+## 4. Control-plane backpressure
+
+| `code` | HTTP | Retry helps? |  |
+| --- | --- | --- | --- |
+| `too_many_streams` | 429 | **Yes** | The control plane is at its concurrent-stream admission cap. `Retry-After: 5`. |
+
+This is saturation, not a quota breach against you — it clears on its own.
+
+## Request size
+
+| `code` | HTTP |  |
+| --- | --- | --- |
+| `request_too_large` | 413 | The body exceeds the inference body cap, 10 MiB by default. |
+
+For large inputs, upload via `/v1/files` and reference the file rather than inlining bytes.
+
+## Capacity is not a rate limit
+
+The most common confusion. These `503`s mean the **fleet** could not serve, not that you exceeded an allowance:
+
+- `no_eligible_node` — no machine is currently eligible. Owners are using their computers.
+- `fleet_busy` — every rung was tried and none could serve.
+- `model_too_large_for_fleet` — no machine has the memory. Only an operator can fix this.
+
+No cap increase helps. Adding machines, or enabling a smaller model, does. See [Fleet and machines](/concepts/fleet-and-machines).
+
+## Handling limits well
+
+1. **Honour `Retry-After`.** It is the server telling you exactly how long to wait.
+2. **Use exponential backoff with jitter** where no `Retry-After` is given.
+3. **Do not retry the non-retryable.** `tier_quota_exceeded`, `budget_exceeded` and `model_too_large_for_fleet` will not clear on the timescale of a retry loop.
+4. **Tier your traffic.** Interactive work stays `interactive`; everything else goes to `batch` or `idle`.
+5. **Watch `X-Kibbu-Budget-Warning`** so a spend cap never surprises you.
