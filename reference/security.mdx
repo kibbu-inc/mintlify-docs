@@ -17,6 +17,12 @@ curl -sS https://app.kibbu.io/.well-known/security.txt
 
 That file is served unauthenticated, follows [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116), and carries the current `Contact` and `Policy` values for the deployment you are testing.
 
+<Warning>
+  If `security.txt` still shows `example.com` addresses, that deployment has not
+  published its security contact yet. Do not send the report there — reach your
+  Kibbu contact directly and they will route it.
+</Warning>
+
 <Note>
   Read the contact from `security.txt` rather than from this page. That way you are always reporting to the operator who can act on it — which is not necessarily us.
 </Note>
