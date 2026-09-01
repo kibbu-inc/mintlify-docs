@@ -14,7 +14,7 @@ Enrolling puts a computer into your fleet so it can serve inference. This is an 
 ## Before you start
 
 - Administrator / `sudo` rights on the machine you are enrolling.
-- Outbound HTTPS to your control plane, and outbound **UDP 51820** for the encrypted mesh. The mesh cannot be proxied.
+- Outbound HTTPS to `app.kibbu.io`, and outbound **UDP 51820** for the encrypted mesh. The mesh cannot be proxied.
 - A machine that will be left plugged in for at least some of the day. Kibbu only serves from machines that are idle and on mains power.
 - A platform that can actually run inference — see [Supported platforms](#supported-platforms).
 
@@ -31,11 +31,11 @@ Copy the command from the console. The token travels in a **header**, not the UR
 <CodeGroup>
 
 ```bash macOS and Linux
-curl -fsSL -H "X-Kibbu-Enroll-Token: <token>" https://<your-control-plane>/install | sudo bash
+curl -fsSL -H "X-Kibbu-Enroll-Token: <token>" https://app.kibbu.io/install | sudo bash
 ```
 
 ```powershell Windows
-iex (iwr -UseBasicParsing -Headers @{"X-Kibbu-Enroll-Token"="<token>"} "https://<your-control-plane>/install.ps1").Content
+iex (iwr -UseBasicParsing -Headers @{"X-Kibbu-Enroll-Token"="<token>"} "https://app.kibbu.io/install.ps1").Content
 ```
 
 </CodeGroup>
@@ -54,8 +54,8 @@ The two install paths differ deliberately, and it is worth knowing which you are
 
 | Path | Behaviour |
 | --- | --- |
-| `https://<cp>/install` — the console one-liner | Installs **and starts** the agent, so the machine enrols before the command returns. This holds whether or not a terminal is attached. |
-| `https://<cp>/deploy/install-script/{os}` — the MDM path | Installs but does **not** start. Pass `--auto-start` / `-AutoStart` when you want it to join, or start the service later. |
+| `https://app.kibbu.io/install` — the console one-liner | Installs **and starts** the agent, so the machine enrols before the command returns. This holds whether or not a terminal is attached. |
+| `https://app.kibbu.io/deploy/install-script/{os}` — the MDM path | Installs but does **not** start. Pass `--auto-start` / `-AutoStart` when you want it to join, or start the service later. |
 
 That split lets you stage an install across many machines with your MDM and choose when they join, while keeping the copy-paste path a single step.
 
@@ -134,7 +134,7 @@ Remember that the MDM script does not auto-start — pass `--auto-start` / `-Aut
 
 <AccordionGroup>
   <Accordion title="The machine never leaves ENROLLING">
-    Almost always outbound **UDP 51820** being blocked — the agent enrolled over HTTPS but cannot bring up the mesh. Check the firewall between the machine and the control plane. HTTP proxies do not help here; the mesh is not proxyable.
+    Almost always outbound **UDP 51820** being blocked — the agent enrolled over HTTPS but cannot bring up the mesh. Check the firewall between the machine and `app.kibbu.io`. HTTP proxies do not help here; the mesh is not proxyable.
   </Accordion>
 
   <Accordion title="The installer finished but nothing appears in the fleet">
