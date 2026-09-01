@@ -61,7 +61,7 @@ Every example uses the same three environment variables.
 
 | Variable | What it is |
 | --- | --- |
-| `KIBBU_BASE_URL` | Your control plane's `/v1` base, for example `https://<your-control-plane>/v1`. The admin console shows the exact host. Never commit a real host into source. |
+| `KIBBU_BASE_URL` | The Kibbu API base: `https://app.kibbu.io/v1`. |
 | `KIBBU_API_KEY` | A per-organization API key. It starts with `kibbu_` and is created in the admin console under **API keys**. Treat it like a password. |
 | `KIBBU_MODEL` | A model id **discovered at runtime** via `GET /v1/models` — never hardcoded. Which models your organization can call depends on what your fleet operator has enabled. |
 

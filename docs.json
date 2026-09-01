@@ -77,8 +77,7 @@
     ]
   },
   "footer": {
-    "socials": {
-    }
+    "socials": {}
   },
   "description": "Run AI inference on the computers your company already owns. Kibbu is an OpenAI-compatible control plane for a fleet of your own machines, with cloud as the overflow.",
   "appearance": {
@@ -86,5 +85,9 @@
   },
   "fonts": {
     "family": "Cabin"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
   }
 }
