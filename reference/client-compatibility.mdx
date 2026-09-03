@@ -62,8 +62,10 @@ Anything built on those libraries — LangChain, LlamaIndex, the Vercel AI SDK, 
 ## What to expect from a stock client
 
 <AccordionGroup>
-  <Accordion title="Streaming works unchanged" icon="wave-square">
-    The SSE format is byte-compatible, terminator included. Streaming helpers in the OpenAI clients need no modification.
+  <Accordion title="Streaming works, with one thing to handle" icon="wave-square">
+    The SSE format is byte-compatible, terminator included, so the streaming helpers in the OpenAI clients need no modification to read an answer.
+
+    What they do not know about is the frame Kibbu emits when the machine serving you is lost mid-answer. A stock client skips it and hands you a truncated answer that looks complete. See [When a stream is interrupted](/api/chat-completions#when-a-stream-is-interrupted).
   </Accordion>
 
   <Accordion title="Retries mostly do the right thing" icon="arrows-rotate">
@@ -103,7 +105,7 @@ const res = await client.chat.completions.create({
 
 </CodeGroup>
 
-The one exception is `POST /v1/rerank`, which has no OpenAI equivalent and therefore no client method — call it over plain HTTP. See [Kibbu extensions](/api/extensions).
+Everything Kibbu adds rides in the request body, so there is no endpoint you need a special client for. See [Kibbu extensions](/api/extensions).
 
 ## Migrating an existing application
 
@@ -127,6 +129,7 @@ The one exception is `POST /v1/rerank`, which has no OpenAI equivalent and there
 These are behavioural, not protocol, differences — worth knowing before you migrate.
 
 - **Cold starts are real.** The first request for a model your fleet has not cached returns `503 model_warming_up`. Retry after `Retry-After`.
+- **A stream can end early, and say so.** Your machines belong to people who take them back. A streaming answer interrupted after the first token ends with a typed frame you are expected to act on — OpenAI has no equivalent, and no stock client handles it.
 - **Capacity is finite and yours.** Your own machines serve you, so capacity errors reflect your fleet's size and how busy the owners are — not a global service.
 - **`n > 1` is usually unavailable.** Most models serve one completion per call and return `400 n_not_supported` otherwise.
 - **Assistants, Threads and Runs are not served.** They return `404 unsupported_endpoint`.

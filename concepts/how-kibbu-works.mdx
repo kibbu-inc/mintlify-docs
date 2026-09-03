@@ -69,6 +69,10 @@ Splitting only happens when a model is too big for one machine. If a single mach
 
 Kibbu prefers that. Splitting is what it does when it must, not what it does by default.
 
+<Note>
+  Splitting is enabled per model, and no model in the current catalog enables it — so today a request is served by a single machine, or by the cloud rung. The mechanism described above ships and is used by models an organization already had enabled; it is not what a new fleet will see.
+</Note>
+
 ## Where the request actually goes
 
 <CardGroup cols={2}>

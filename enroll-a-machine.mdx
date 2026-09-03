@@ -59,6 +59,8 @@ The two install paths differ deliberately, and it is worth knowing which you are
 
 That split lets you stage an install across many machines with your MDM and choose when they join, while keeping the copy-paste path a single step.
 
+Both paths read the token from the `X-Kibbu-Enroll-Token` header. The MDM endpoint returns a script with the control-plane URL and the token already substituted in, so fetching it without the header gives you a script that cannot enrol anything.
+
 ## 3. Watch it come online
 
 Open **Fleet** in the admin console. A machine goes `ENROLLING → IDLE`:
@@ -85,12 +87,14 @@ The agent installs and enrols on more platforms than can actually serve inferenc
 | macOS, Apple Silicon (`arm64`) | Yes |
 | macOS, Intel (`amd64`) | Yes |
 | Linux, `x86_64` | Yes |
+| Linux, `arm64` | Yes |
 | Windows, `x86_64` | Yes |
-| Linux, `arm64` | **No** — no engine payload is published |
-| Windows, `arm64` | **No** — no engine payload is published |
+| Windows, `arm64` | **Unverified** — see below |
+
+Linux on ARM serves like any other machine: the engine and the optional Python runtime both ship for it, and ARM machines count toward your serving capacity. Per-machine throughput has not been benchmarked on either Linux architecture, so plan capacity by what fits in memory rather than by assuming an ARM machine matches a given x86 one.
 
 <Warning>
-  Raspberry Pis, ARM cloud instances and ARM Windows laptops enrol and appear healthy in the fleet, but cannot serve. Do not plan capacity around them.
+  **Windows on ARM is not proven.** The engine ships with the ARM64 installer, so the machine may report itself ready — but no Windows ARM machine has yet served a request on real hardware. Treat it as untested rather than working, and do not plan capacity around it.
 </Warning>
 
 Within the supported set, a machine with a GPU or Apple Silicon is worth many CPU-only ones, and Kibbu prefers them for interactive traffic.
@@ -153,3 +157,17 @@ Remember that the MDM script does not auto-start — pass `--auto-start` / `-Aut
 ## Removing a machine
 
 Run `kibbu uninstall` on the machine, or the uninstaller shipped alongside the installer. `--purge` also destroys the machine's identity, so a later re-install enrols as a new machine. Decommissioning it in the admin console stops work being placed on it without touching the machine itself.
+
+There is also a one-liner, mirroring the installer. It needs no token — it only touches local state on that machine:
+
+<CodeGroup>
+
+```bash macOS and Linux
+curl -fsSL https://app.kibbu.io/uninstall | sudo bash
+```
+
+```powershell Windows
+iex (iwr -UseBasicParsing "https://app.kibbu.io/uninstall.ps1").Content
+```
+
+</CodeGroup>

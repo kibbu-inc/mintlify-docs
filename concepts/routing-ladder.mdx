@@ -12,6 +12,8 @@ Every request walks the same ladder, in the same order, stopping at the first ru
   </Step>
   <Step title="Several of your machines">
     If no single machine can hold the model, Kibbu splits it across a few and streams the work between them. See [How Kibbu works](/concepts/how-kibbu-works).
+
+    This rung is enabled per model, and no model in the current catalog enables it. On a new fleet the ladder goes straight from one machine to cloud.
   </Step>
   <Step title="A cloud provider">
     Only if your operator has configured one, and only if the local rungs could not serve. This costs money, so every call is recorded with the reason it left.
@@ -80,9 +82,11 @@ A saturated tier returns `429 tier_concurrency_cap` with a dynamic `Retry-After`
 
 ## Recovering from a lost machine
 
-Machines are laptops. They get closed, unplugged and picked up mid-request. Kibbu re-routes around a machine that disappears, and a request already streaming can be moved and completed.
+Machines are laptops. They get closed, unplugged and picked up mid-request. Kibbu re-routes around a machine that disappears, and a request that has not yet produced a token is restarted on the next rung without you noticing.
 
-Where it genuinely cannot recover, you get `node_unavailable` — the machine pinned to your conversation was lost. Retrying is the right response.
+Once tokens have started flowing, it cannot do that silently — the partial answer is already on the wire. A streaming request whose machine is lost mid-answer ends with a typed frame naming the reason, and you reissue it. A non-streaming request that could not be recovered returns `node_unavailable`.
+
+What arrives on the wire in each case, and what your client should do about it, is set out in [When a stream is interrupted](/api/chat-completions#when-a-stream-is-interrupted).
 
 ## Seeing where a request went
 
