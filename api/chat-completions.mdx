@@ -118,6 +118,7 @@ with httpx.stream("POST", f"{BASE_URL}/chat/completions", headers=HEADERS, json=
 
 | Header | Meaning |
 | --- | --- |
+| `X-Kibbu-Serve-Path` | Which rung actually served you: `edge` for your own machines, `cloud` for a provider. Absent when Kibbu cannot say. The only way to tell whether an `upstream_error` came from your hardware or someone else's. |
 | `X-Kibbu-Slow-Serve` | The request was served on hardware below the interactive speed floor, because that was better than refusing. Expect a slow answer. |
 | `X-Kibbu-Budget-Warning` | Your organization has passed a percentage of its spend budget. The request was still served. |
 | `Retry-After` | On `429` and most `503`s, how long to wait. |

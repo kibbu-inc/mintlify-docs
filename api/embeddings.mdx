@@ -23,7 +23,7 @@ curl -sS "$KIBBU_BASE_URL/embeddings" \
 </ParamField>
 
 <ParamField body="input" type="string | string[]" required>
-  One string or an array of strings. Exceeding the per-request document cap returns `400 too_many_documents`.
+  One string, or an array of strings. Arrays of token ids are rejected — send text.
 </ParamField>
 
 <ParamField body="dimensions" type="integer">
@@ -44,7 +44,11 @@ Vectors come back **unit length**. Kibbu handles `dimensions` and `encoding_form
 
 ## Each input must fit in one pass
 
-An embedding is computed in a single pass; unlike a chat completion it cannot be streamed or split across batches. An input longer than the serving machine can process in one go returns `400 context_length_exceeded` rather than a server error — split the text and embed the pieces.
+An embedding is computed in a single pass. Unlike a chat completion it cannot be streamed or split across batches, so an input longer than the serving machine can process in one go fails outright rather than being truncated or chunked for you.
+
+<Warning>
+  That failure currently surfaces as a generic `502 upstream_error`, not as a validation error naming the length. If you are embedding text of unpredictable size, chunk it yourself rather than relying on the error to tell you which input was too long.
+</Warning>
 
 ## Errors
 
@@ -53,8 +57,7 @@ An embedding is computed in a single pass; unlike a chat completion it cannot be
 | `400` | `model_not_enabled_for_org` | The model exists but is not enabled for your organization. |
 | `400` | `model_kind_mismatch` | A chat model was addressed at the embeddings endpoint. |
 | `400` | `dimensions_not_supported_by_model` | `dimensions` is not supported here. |
-| `400` | `too_many_documents` | Input array exceeds the per-request cap. Split it. |
-| `400` | `context_length_exceeded` | One input is longer than the machine can embed in a single pass. |
+| `502` | `upstream_error` | The machine failed to produce vectors — including when one input was too long to embed in a single pass. |
 | `503` | `model_not_loaded` | No machine has the model warm yet. Retry shortly. |
 
 <Note>

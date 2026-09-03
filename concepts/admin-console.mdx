@@ -14,7 +14,7 @@ The console is where machines are enrolled, models are enabled, and spend is att
   </Card>
 
   <Card title="Fleet" icon="server">
-    Every enrolled machine, its state, and what it is serving. **Add machine** issues an enrollment token and renders the install command. Selecting a machine opens a detail pane with its telemetry and network path.
+    Every enrolled machine, its state, hardware, current job, throughput and version. **Add machine** issues an enrollment token and renders the install command. Selecting a machine opens a detail pane beside the list; selecting several lets you drain, rotate or decommission them together.
   </Card>
 
   <Card title="Requests" icon="list-check">
@@ -49,6 +49,23 @@ The console is where machines are enrolled, models are enabled, and spend is att
     Who did what: sign-ins, key issuance and revocation, model enablement, machine approval and decommissioning.
   </Card>
 </CardGroup>
+
+## The machine detail pane
+
+Selecting a machine on **Fleet** opens a pane beside the list rather than navigating away, so you keep the fleet in view. It has four tabs:
+
+| Tab | Shows |
+| --- | --- |
+| **Overview** | Processor, memory in use, tokens served, network in and out, temperature — and, most usefully, the full list of eligibility gates with the ones this machine currently fails. |
+| **Models** | What this machine has cached and what it is able to run. |
+| **Network** | How this machine reaches the others, and over what transport. |
+| **Activity** | What it has been doing. |
+
+<Note>
+  **Network** only has something to say on a fleet of two or more machines. On a one-machine fleet there are no peers to show, and the tab says so rather than rendering an empty diagram.
+</Note>
+
+The **Overview** tab is the fastest answer to "why is this machine not serving?" — it names the gate rather than making you infer it.
 
 ## The four things worth doing on day one
 

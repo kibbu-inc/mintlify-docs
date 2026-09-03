@@ -65,11 +65,12 @@ These are the surfaces the product is built around.
 | `/v1/images/*` | Generation, edits, variations, control. |
 | `POST /v1/videos/generations` | Video generation. |
 | `GET /v1/realtime` | Realtime WebSocket session. |
-| `/v1/code_interpreter/*` | Sandboxed code execution. |
 
 <Warning>
   Image and video generation need more than the feature flag: no serving runtime for them ships on fleet machines today, so enabling the flag alone will not make them work. Treat them as unavailable unless your operator tells you otherwise.
 </Warning>
+
+`/v1/code_interpreter/*` is the exception to the pattern above: it is always mounted, so sessions can be created and listed, but there is no execution backend on the fleet. `POST` to its `/exec` route returns `503 code_interp_no_backends_registered` — a live route with nothing behind it, not a `404`.
 
 ### Data rights
 

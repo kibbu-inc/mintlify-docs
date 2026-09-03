@@ -68,7 +68,37 @@ For models that reason before answering.
   `{ "budget_tokens": <integer> }`. A negative or malformed budget returns `400 invalid_thinking_budget`.
 </ParamField>
 
-Reasoning output comes back separately from the answer — as `reasoning` on the choice, `reasoning_content` on a streaming delta, and `usage.reasoning_tokens` on the usage block. It is never mixed into `content`, so a client that ignores those fields shows the user the answer alone.
+Reasoning comes back separately from the answer, never mixed into `content`, so a client that ignores it shows the user the answer alone.
+
+| Where | Field | Shape |
+| --- | --- | --- |
+| Non-streaming | `choices[].reasoning` | An object: `{ "content": "..." }` |
+| Streaming | `choices[].delta.reasoning` | A string |
+| Either | `usage.reasoning_tokens` | An integer |
+
+Each is omitted entirely rather than sent empty, so absence means the model did no thinking on that response — or that chunk.
+
+<Warning>
+  **Read `reasoning`, not `reasoning_content`.** Some engines emit the thinking channel as `reasoning_content`; Kibbu renames it to `reasoning` and clears the original before the response leaves the control plane. A client reading `reasoning_content` off a response or a delta always gets nothing.
+</Warning>
+
+### Send the thinking back on the next turn
+
+This is the one thing reasoning models ask of you, and getting it wrong is expensive rather than fatal.
+
+When you continue a conversation, put the previous assistant turn's thinking back on that message as **`reasoning_content`** — the inbound spelling, which is deliberately not the one you read it from:
+
+```json
+{
+  "role": "assistant",
+  "content": "The answer is 42.",
+  "reasoning_content": "Let me work through this..."
+}
+```
+
+Drop it and the prompt no longer matches what the machine already has cached, so the whole conversation is reprocessed from the point the thinking would have started. On a reasoning model most of a turn is thinking, so the loss is not marginal: in one measured three-turn conversation the reusable fraction of the prompt fell to 7%. Answers stay correct — they just get slower and cost more every turn.
+
+Both spellings are accepted on input, so a client that sends `reasoning` instead still works.
 
 ## Prompt templates
 
@@ -114,6 +144,7 @@ Kibbu sets a few response headers you may want to read.
 
 | Header | Meaning |
 | --- | --- |
+| `X-Kibbu-Serve-Path` | Which rung actually served you: `edge` for your own machines, `cloud` for a provider. Absent when Kibbu cannot say. The only way to tell whether an `upstream_error` came from your hardware or someone else's. |
 | `X-Kibbu-Slow-Serve` | Served on hardware below the interactive speed floor, because that beat refusing. Expect a slow answer. |
 | `X-Kibbu-Budget-Warning` | Your organization has passed this percentage of its spend budget. The request was still served. |
 | `x-ratelimit-limit-requests` | The tier's concurrent-request cap. |
