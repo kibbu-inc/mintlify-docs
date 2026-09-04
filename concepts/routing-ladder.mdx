@@ -13,7 +13,7 @@ Every request walks the same ladder, in the same order, stopping at the first ru
   <Step title="Several of your machines">
     If no single machine can hold the model, Kibbu splits it across a few and streams the work between them. See [How Kibbu works](/concepts/how-kibbu-works).
 
-    This rung is enabled per model, and no model in the current catalog enables it. On a new fleet the ladder goes straight from one machine to cloud.
+    Only the largest models use this rung — the ones no single machine in your fleet could hold. For everything else the ladder goes straight from one machine to cloud.
   </Step>
   <Step title="A cloud provider">
     Only if your operator has configured one, and only if the local rungs could not serve. This costs money, so every call is recorded with the reason it left.
